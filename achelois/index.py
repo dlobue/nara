@@ -124,7 +124,7 @@ class locate(object):
     def threadpage(self, recquery=u'*', pagenum=1, perpage=20):
         #self.query = self.parser.parse('*')
         #self.results = self.searcher.search(self.query, sortedby='date', reverse=True)
-        self.results = start(recquery, sortkey='date')
+        self.results = self.start(recquery, sortkey='date')
         if recquery == u'*': self.results = Paginator(self.results, perpage=perpage).page(pagenum)
         [self.cache['messages'].append(i) for i in self.results if i not in self.cache['messages']]
         self.refs = [ [p['in_reply_to'], p['references'].split()] for p in self.results ]
@@ -137,9 +137,17 @@ class locate(object):
             self.cache['references'].append(i)
 
         if self.newref:
+            #
+            # Last batch of messages found reference new messages.
+            # keep going.
+            # 
             self.refs = u' OR '.join(self.refs).translate(badchars)
-            return threadpage(recquery=self.refs)
+            return self.threadpage(recquery=self.refs)
         else:
+            #
+            # no new references found in last batch of messages.
+            # lets thread!
+            #
             #return threadMessages(self.cache['messages'])
             return self.cache
 

@@ -50,8 +50,8 @@ number.
 import re
 
 # Set these depening on how brave and/or curious you are
-kModuleDebug=1
-kModuleVerbose=1
+kModuleDebug=0
+kModuleVerbose=0
 
 kVersion="0.5"
 
@@ -245,9 +245,9 @@ def jwzThread(iterableMailbox):
   nDupMsgIDs=0
   for msg in iterableMailbox:
     nMsgs+=1
-    subjHeader=msg.get("subject","")
-    refsHeader=msg.get("references","")
-    msgIDHeader=msg.get("message-id","")
+    subjHeader=msg["subject"]
+    refsHeader=msg["references"]
+    msgIDHeader=msg["msgid"]
 
     if idTable.has_key(msgIDHeader):
       thisMessageContainer=idTable[msgIDHeader]
@@ -273,7 +273,7 @@ def jwzThread(iterableMailbox):
       else:
         ind+=1
 
-    irtHeader=msg.get("in-reply-to","")
+    irtHeader=msg["in_reply_to"]
     ans=kInAngleBracketsRE.search(irtHeader)
     if ans<>None:
       irtID=ans.group(1)
@@ -443,9 +443,9 @@ def jwzThread(iterableMailbox):
   subjectTable={}
   for thisContainer in rootSet:
     if len(thisContainer.messages)>0:
-      subjHeader=thisContainer.messages[0].get("subject","")
+      subjHeader=thisContainer.messages[0]["subject"]
     else:
-      subjHeader=thisContainer.children[0].messages[0].get("subject","")
+      subjHeader=thisContainer.children[0].messages[0]["subject"]
     strippedSubject=stripSubjJunk(subjHeader)
 
     thisContainer.subject=subjHeader

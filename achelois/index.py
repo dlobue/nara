@@ -62,7 +62,8 @@ class indexer(object):
 
             for muuid, msg in self.maild.iteritems():
                 tmp = ' '.join([m.get_payload(decode=True) for m in \
-                        email.iterators.typed_subpart_iterator(msg)])
+                        email.iterators.typed_subpart_iterator(msg) \
+                        if 'filename' not in m.get('Content-Disposition','')])
                 clist = filter(lambda x: x, list(set(msg.get_charsets())))
                 ucontent = None
                 if clist == []: clist = ['utf-8']
@@ -118,13 +119,13 @@ class locate(object):
         self.newref = True
         self.cache[field].append(entity)
 
-    def threadpage(self, recquery=u'subject:*', pagenum=1, perpage=40, dispHeight=30, external_cache=None):
+    def threadpage(self, recquery=u'muuid:*', pagenum=1, perpage=40, dispHeight=30, external_cache=None):
         if external_cache is not None: self.cache = external_cache
 
         # fuck, why am i searching AGAIN when i have the fucking cache?!
         self.results = self.start(recquery, sortkey='date')
         return threadMessages.jwzThread(self.results)
-        if recquery == u'subject:*':
+        if recquery == u'muuid:*':
             self.results = Paginator(self.results, perpage=perpage).page(pagenum)
 
         self.newref = False
@@ -179,8 +180,8 @@ def printSubjects(listOfTrees):
 
 
 if __name__ == '__main__':
-    a = indexer()
-    a.start()
+    #a = indexer()
+    #a.start()
     q = locate('msgid')
     #r = q.start(u'*', sortkey=u'date')
     #p = Paginator(r, perpage=40)

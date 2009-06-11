@@ -48,7 +48,10 @@ class indexer(object):
         self.mpath = os.path.join(settings['rdir'], settings['maildirinc'][1])
         self.maild = mailbox.Maildir(self.mpath, factory=mailbox.MaildirMessage, create=False)
 
-        self.writer = self.ix.writer()
+        # whoosh's default of 4 megs of ram is simply not enough 
+        # to index 500 megs of ram. the cache has to be flushed way
+        # way too many times, and as a result slows indexing down immensely.
+        self.writer = self.ix.writer(postlimit=256*1024*1024)
         self.mtime = u'%s' % datetime.now().isoformat()
 
     def test(self):
@@ -106,13 +109,13 @@ class locate(object):
         self.parser = QueryParser(pri_field, schema=self.ix.schema)
         self.cache = {'references':[], 'messages': [], 'page': 1}
 
-    def start(self, target, sortkey=None):
+    def start(self, target, sortkey=None, resultlimit=5000):
         if sortkey is None:
             reverse = True
         else:
             reverse = False
         self.query = self.parser.parse(target)
-        self.results = self.searcher.search(self.query, sortedby=sortkey, reverse=reverse)
+        self.results = self.searcher.search(self.query, limit=resultlimit, sortedby=sortkey, reverse=reverse)
         return self.results
 
     def cacheadder(self, field, entity):
@@ -123,7 +126,7 @@ class locate(object):
         if external_cache is not None: self.cache = external_cache
 
         # fuck, why am i searching AGAIN when i have the fucking cache?!
-        self.results = self.start(recquery, sortkey='date')
+        self.results = self.start(recquery, sortkey='date', resultlimit=50000000)
         return threadMessages.jwzThread(self.results)
         if recquery == u'muuid:*':
             self.results = Paginator(self.results, perpage=perpage).page(pagenum)

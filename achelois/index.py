@@ -13,6 +13,8 @@ from whoosh import store
 from whoosh.qparser import QueryParser
 from whoosh.searching import Paginator
 
+from string import punctuation
+
 import simplejson
 
 global settings
@@ -20,33 +22,11 @@ f = open('settings.json', 'r')
 settings = simplejson.loads(f.read())
 f.close()
 
-#rdir = '/tank/projects/emailtest/offlineimap/dlobue'
-#ixmetadir = "/tank/projects/emailtest/index_dir"
 global badchars
-badchars = dict(map(lambda x: (ord(x), None), '><@'))
+badchars = dict(map(lambda x: (ord(x), None), punctuation))
 dispHeight = 30
 
 inuse_message_cache = None
-
-
-
-'''maildirinc = ['INBOX',
-        'INBOX.MIEN',
-        'INBOX.Read',
-        'INBOX.alertsite',
-        'INBOX.atg errors',
-        'INBOX.hp sim',
-        'INBOX.misc',
-        'INBOX.mom',
-        'INBOX.monit',
-        'INBOX.nagios',
-        'INBOX.networkperf',
-        'INBOX.receipt',
-        'INBOX.save',
-        'INBOX.scom',
-        'Sent',
-        'Sent Items']
-        '''
 
 schema = Schema(subject=TEXT(stored=True),
                 recipient=TEXT(stored=True),
@@ -76,56 +56,45 @@ class indexer(object):
         return msg
 
     def start(self):
-        #c=0
-        for muuid, msg in self.maild.iteritems():
-            #c +=1
-            #msg = maild.next()
-            #if msg is None: break
-            tmp = ' '.join([m.get_payload(decode=True) for m in \
-                    email.iterators.typed_subpart_iterator(msg)])
-            clist = filter(lambda x: x, list(set(msg.get_charsets())))
-            ucontent = None
-            if clist == []: clist = ['utf-8']
-            for citem in clist:
-                try:
-                    ucontent = unicode(tmp, citem)
-                    break
-                except: pass
-        
-            if ucontent is None:
-                raise TypeError("couldn't encode email body into unicode properly.", clist, msg._headers, tmp, msg.get_charsets())
-            # FIXME: add in more robust error checking on unicode conversion.
-            # ex- try guessing what the character that's giving us grief is.
-            # fail that, just ignore the strangly encoded char
-        
-            #badchars = dict(map(lambda x: (ord(x), None), '><@'))
-            msgid = u'%s' % msg['Message-ID']
-            #indexable_msgid = msgid.translate(badchars)
-            self.writer.add_document(subject=u'%s' % msg['Subject'] or u'None',
-                                muuid=unicode(muuid),
-                                msgid=msgid.translate(badchars),
-                                _stored_msgid=msgid,
-                                in_reply_to=u'%s' % msg['In-Reply-To'],
-                                references=u'%s' % msg['References'],
-                                recipient=u'%s' % msg['To'],
-                                sender=u'%s' % msg['From'],
-                                date=u'%s' % datetime.fromtimestamp(msg._date).isoformat(),
-                                mtime=self.mtime,
-                                labels=u'%s' % msg['Labels'],
-                                content=ucontent,
-                                _stored_content=ucontent[:80])
-            '''if c == 500:
-                """periodically commit so if we crash (gasp), at least
-                we don't have to redo all that damn work we just did.
-                in addition, we do _not_ want whoosh to optimize the index
-                every time we commit, or we'll be waiting forever"""
-                print 'periodic save-state'
-                writer.commit(NO_MERGE)
-                c=0
-                '''
+        for mdir in settings['maildirinc']:
+            self.mpath = os.path.join(settings['rdir'], mdir)
+            self.maild = mailbox.Maildir(self.mpath, factory=mailbox.MaildirMessage, create=False)
 
-        print 'optimizing index'
-        self.writer.commit(OPTIMIZE)
+            for muuid, msg in self.maild.iteritems():
+                tmp = ' '.join([m.get_payload(decode=True) for m in \
+                        email.iterators.typed_subpart_iterator(msg)])
+                clist = filter(lambda x: x, list(set(msg.get_charsets())))
+                ucontent = None
+                if clist == []: clist = ['utf-8']
+                for citem in clist:
+                    try:
+                        ucontent = unicode(tmp, citem)
+                        break
+                    except: pass
+            
+                if ucontent is None:
+                    raise TypeError("couldn't encode email body into unicode properly.", clist, msg._headers, tmp, msg.get_charsets(), muuid, self.mpath)
+                # FIXME: add in more robust error checking on unicode conversion.
+                # ex- try guessing what the character that's giving us grief is.
+                # fail that, just ignore the strangly encoded char
+            
+                msgid = u'%s' % msg['Message-ID']
+                self.writer.add_document(subject=u'%s' % msg['Subject'] or u'None',
+                                    muuid=unicode(muuid),
+                                    msgid=msgid.translate(badchars),
+                                    _stored_msgid=msgid,
+                                    in_reply_to=u'%s' % msg['In-Reply-To'],
+                                    references=u'%s' % msg['References'],
+                                    recipient=u'%s' % msg['To'],
+                                    sender=u'%s' % msg['From'],
+                                    date=u'%s' % datetime.fromtimestamp(msg.get_date()).isoformat(),
+                                    mtime=self.mtime,
+                                    labels=u'%s' % msg['Labels'],
+                                    content=ucontent,
+                                    _stored_content=ucontent[:80])
+    
+            print "writing out index"
+            self.writer.commit(OPTIMIZE)
 
 class locate(object):
     def __init__(self, pri_field=u"subject"):
@@ -152,12 +121,16 @@ class locate(object):
     def threadpage(self, recquery=u'subject:*', pagenum=1, perpage=40, dispHeight=30, external_cache=None):
         if external_cache is not None: self.cache = external_cache
 
+        # fuck, why am i searching AGAIN when i have the fucking cache?!
         self.results = self.start(recquery, sortkey='date')
-        if recquery == u'subject:*': self.results = Paginator(self.results, perpage=perpage).page(pagenum)
+        return threadMessages.jwzThread(self.results)
+        if recquery == u'subject:*':
+            self.results = Paginator(self.results, perpage=perpage).page(pagenum)
 
         self.newref = False
-        [self.cache['messages'].append(i) for i in self.results if i not in self.cache['messages']]
-        self.refs = [ [p['in_reply_to'], p['references'].split()] for p in self.results ]
+        #[self.cache['messages'].append(i) for i in self.results if i not in self.cache['messages']]
+        [self.cacheadder('messages', i) for i in self.results if i not in self.cache['messages']]
+        self.refs = [[p['in_reply_to'], p['references'].split()] for p in self.results]
         self.refs = list(set(tools.flatten(self.refs)))
 
         [self.cacheadder('references', i) for i in self.refs if i not in self.cache['references']]
@@ -170,7 +143,11 @@ class locate(object):
         if self.newref:
             # Last batch of messages found reference new messages.
             # keep going.
-            self.refs = u' OR '.join(self.refs).translate(badchars)
+            #self.refs = u' OR '.join(self.refs).translate(badchars)
+            self.refs = self.refs.translate(badchars)
+            self.subjects = [u'subject:(%s)' %
+                    threadMessages.stripSubjJunk(x['subject']).translate(badchars) \
+                    for x in self.results]
             return self.threadpage(recquery=self.refs)
         else:
             # no new references found in last batch of messages.
@@ -202,8 +179,8 @@ def printSubjects(listOfTrees):
 
 
 if __name__ == '__main__':
-    #a = indexer()
-    #a.start()
+    a = indexer()
+    a.start()
     q = locate('msgid')
     #r = q.start(u'*', sortkey=u'date')
     #p = Paginator(r, perpage=40)
@@ -213,11 +190,12 @@ if __name__ == '__main__':
     import inspect
     print r
     print len(r)
-    for i in r:
+    '''for i in r:
         w = inspect.getmembers(i)
         for y in w:
             print y
         print '\n\n\n'
+        '''
     #printSubjects(r)
     #print r['messages']
     #print len(r['messages'])

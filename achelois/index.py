@@ -2,8 +2,12 @@ import email
 import os
 import mailbox
 import tools
-import threadMessages
 from datetime import datetime
+
+import cProfile
+
+import threadMessages
+import jwzthreading
 
 import whoosh.index
 from whoosh.fields import ID, TEXT, KEYWORD, STORED, Schema
@@ -49,58 +53,65 @@ class indexer(object):
         self.maild = mailbox.Maildir(self.mpath, factory=mailbox.MaildirMessage, create=False)
 
         # whoosh's default of 4 megs of ram is simply not enough 
-        # to index 500 megs of ram. the cache has to be flushed way
+        # to index 500 megs of mail. the cache has to be flushed way
         # way too many times, and as a result slows indexing down immensely.
         self.writer = self.ix.writer(postlimit=256*1024*1024)
+
+    def index_all(self):
         self.mtime = u'%s' % datetime.now().isoformat()
-
-    def test(self):
-        msg = self.maild.next()
-        return msg
-
-    def start(self):
         for mdir in settings['maildirinc']:
             self.mpath = os.path.join(settings['rdir'], mdir)
             self.maild = mailbox.Maildir(self.mpath, factory=mailbox.MaildirMessage, create=False)
+            
+            #speeds everything up by reading entire header cache into ram
+            #before searching, rather than doing it one header at a time.
+            self.maild._refresh()
 
-            for muuid, msg in self.maild.iteritems():
-                tmp = ' '.join([m.get_payload(decode=True) for m in \
-                        email.iterators.typed_subpart_iterator(msg) \
-                        if 'filename' not in m.get('Content-Disposition','')])
-                clist = filter(lambda x: x, list(set(msg.get_charsets())))
-                ucontent = None
-                if clist == []: clist = ['utf-8']
-                for citem in clist:
-                    try:
-                        ucontent = unicode(tmp, citem)
-                        break
-                    except: pass
-            
-                if ucontent is None:
-                    raise TypeError("couldn't encode email body into unicode properly.", clist, msg._headers, tmp, msg.get_charsets(), muuid, self.mpath)
-                # FIXME: add in more robust error checking on unicode conversion.
-                # ex- try guessing what the character that's giving us grief is.
-                # fail that, just ignore the strangly encoded char
-            
-                msgid = u'%s' % msg['Message-ID']
-                self.writer.add_document(subject=u'%s' % msg['Subject'] or u'None',
-                                    muuid=unicode(muuid),
-                                    msgid=msgid.translate(badchars),
-                                    _stored_msgid=msgid,
-                                    in_reply_to=u'%s' % msg['In-Reply-To'],
-                                    references=u'%s' % msg['References'],
-                                    recipient=u'%s' % msg['To'],
-                                    sender=u'%s' % msg['From'],
-                                    date=u'%s' % datetime.fromtimestamp(msg.get_date()).isoformat(),
-                                    mtime=self.mtime,
-                                    labels=u'%s' % msg['Labels'],
-                                    content=ucontent,
-                                    _stored_content=ucontent[:80])
+            #for muuid, msg in self.maild.iteritems():
+            print 'indexing %s' % mdir
+            [self.parse(muuid, msg) for muuid,msg in self.maild.iteritems():]
     
-            print "writing out index"
-            self.writer.commit(OPTIMIZE)
+        print "writing out and optimizing index"
+        self.writer.commit(OPTIMIZE)
 
-class locate(object):
+    def parse(self, muuid, msg):
+        tmp = ' '.join([m.get_payload(decode=True) for m in \
+                email.iterators.typed_subpart_iterator(msg) \
+                if 'filename' not in m.get('Content-Disposition','')])
+        clist = filter(lambda x: x, list(set(msg.get_charsets())))
+        ucontent = None
+        if clist == []: clist = ['utf-8']
+        for citem in clist:
+            try:
+                ucontent = unicode(tmp, citem)
+                break
+            except: pass
+    
+        if ucontent is None:
+            raise TypeError("couldn't encode email body into unicode properly.", clist, msg._headers, tmp, msg.get_charsets(), muuid, self.mpath)
+        # FIXME: add in more robust error checking on unicode conversion.
+        # ex- try guessing what the character that's giving us grief is.
+        # fail that, just ignore the strangly encoded char
+    
+        msgid = u'%s' % msg['Message-ID']
+        sent_date = time.mktime(email.utils.parsedate(msg['date']))
+
+        self.writer.add_document(subject=u'%s' % msg['Subject'],
+                            muuid=unicode(muuid),
+                            msgid=msgid.translate(badchars),
+                            _stored_msgid=msgid,
+                            in_reply_to=u'%s' % msg['In-Reply-To'],
+                            references=u'%s' % msg['References'],
+                            recipient=u'%s' % msg['To'],
+                            sender=u'%s' % msg['From'],
+                            date=u'%s' % sent_date,
+                            mtime=self.mtime,
+                            labels=u'%s' % msg['Labels'],
+                            content=ucontent,
+                            _stored_content=ucontent[:80])
+
+
+class result_machine(object):
     def __init__(self, pri_field=u"subject"):
         self.storage = store.FileStorage(settings['ixmetadir'])
         self.ix = whoosh.index.Index(self.storage)
@@ -109,7 +120,7 @@ class locate(object):
         self.parser = QueryParser(pri_field, schema=self.ix.schema)
         self.cache = {'references':[], 'messages': [], 'page': 1}
 
-    def start(self, target, sortkey=None, resultlimit=5000):
+    def search(self, target, sortkey=None, resultlimit=5000):
         if sortkey is None:
             reverse = True
         else:
@@ -122,13 +133,20 @@ class locate(object):
         self.newref = True
         self.cache[field].append(entity)
 
-    def threadpage(self, recquery=u'muuid:*', pagenum=1, perpage=40, dispHeight=30, external_cache=None):
+    def thread_search(self, recquery=u'muuid:*', pagenum=1, perpage=40, dispHeight=30, external_cache=None):
         if external_cache is not None: self.cache = external_cache
 
         # fuck, why am i searching AGAIN when i have the fucking cache?!
         self.results = self.start(recquery, sortkey='date', resultlimit=50000000)
-        return threadMessages.jwzThread(self.results)
+        #print 'starting map'
+        #print 'done with map, starting threading'
+        #return jwzthreading.thread(self.results)
+        #return threadMessages.jwzThread(self.results)
+        return self.results
         if recquery == u'muuid:*':
+            self.results = [ jwzthreading.make_message(self.msg) for self.msg in self.results ]
+            self.results = jwzthreading.thread(self.results)
+            return self.results
             self.results = Paginator(self.results, perpage=perpage).page(pagenum)
 
         self.newref = False
@@ -169,35 +187,35 @@ class locate(object):
             return thread
 
 
-def printRecurse(node,depth=0):
-    for message in node.messages:
-        print "  "*depth+message.get("date")
-    for child in node.children:
-        printRecurse(child,depth+1)
-    return None
-
-def printSubjects(listOfTrees):
-    for tree in listOfTrees:
-        printRecurse(tree)
-    return None
-
-
 if __name__ == '__main__':
-    #a = indexer()
-    #a.start()
-    q = locate('msgid')
+    a = indexer()
+    a.index_all()
+    import lazythread
+    msgthread = lazythread.Thread()
+    q = result_machine('msgid')
     #r = q.start(u'*', sortkey=u'date')
     #p = Paginator(r, perpage=40)
     #for y in p.page(1): print y['date'], y['subject']
     r = q.threadpage()
-    #for y in r: print y
-    import inspect
-    print r
+    print 'going for broke - lets thread!'
+    print datetime.utcnow()
+    #r = [ jwzthreading.make_message(msg) for msg in r]
+    #r = jwzthreading.thread(r)
+    r = msgthread.thread(r)
+    print datetime.utcnow()
     print len(r)
+    r.sort()
+    print r[0],'\n\n\n'
+    print r[-1]
+    #print r.sort()
+    print 'done threading!'
+    #for y in r: print y
+    #import inspect
+    #print r
+    #print len(r)
     '''for i in r:
-        w = inspect.getmembers(i)
-        for y in w:
-            print y
+        #print inspect.getmembers(i)
+        print i
         print '\n\n\n'
         '''
     #printSubjects(r)

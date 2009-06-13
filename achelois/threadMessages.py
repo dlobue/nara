@@ -60,35 +60,45 @@ kSubjJunkRE=re.compile("^re[\[\]0-9 ]* *: *") # Could be more sophisticated
 
 
 def chaseChildrenForID(container,msgID):
-  while 1:
-    if container.messageID==msgID:
-      return 1
-    if len(container.children)==0:
-      return 0
-    for child in container.children:
-      result=chaseChildrenForID(child,msgID)
-      if result:
-        return 1
+  if container.messageID==msgID:
+    return 1
+  if not container.children:
     return 0
+  for child in container.children:
+    result=chaseChildrenForID(child,msgID)
+    if result:
+      return 1
+  return 0
 
 
 def chaseParentsForID(container,msgID):
   while 1:
     if container.messageID==msgID:
       return 1
-    if container.parent==None:
+    if not container.parent:
       return 0
     container=container.parent
 
 
 # Could lose Fw:, Fwd:, etc
 def stripSubjJunk(subj):
+  lower = str.lower
+  strip = str.strip
   while 1:
-    subj=subj.lower()
+    l = lower(subj)
+    if l.startswith('re:'): 
+      subj = strip(subj[3:])
+    elif l.startswith('fwd:'):
+      subj = strip(subj[4:])
+    else:
+      return subj
+
+    '''subj=subj.lower()
     where=kSubjJunkRE.search(subj)
-    if where==None:
+    if not where:
       return subj.strip()
     subj=subj[len(where.group(0)):]
+    '''
 
 
 class messageContainer:
@@ -99,15 +109,14 @@ class messageContainer:
     self.messageID=None
     self.subject=None
     self.strippedSubject=None
-    return None
 
   def __repr__(self):
-    if self.parent==None:
+    if not self.parent:
       parentStr="no"
     else:
       parentStr="yes"
 
-    if self.messageID==None:
+    if not self.messageID:
       idStr="(none)"
     else:
       idStr=self.messageID
@@ -118,8 +127,10 @@ class messageContainer:
 
 def tableCount(idTable):
   tot=0
-  for container in idTable.values():
+  [count_factory(tot, len(container.messages)) for container in idTable.values()]
+  '''for container in idTable.values():
     tot+=len(container.messages)
+    '''
   return tot
 
 def countMessages(rootSet):
@@ -167,7 +178,7 @@ def countContainersWithoutMessages(rootSet):
 
   def recurseCountNoMessages(container):
     empties=0
-    if len(container.messages)==0:
+    if not container.messages:
       empties+=1
       for child in container.children:
         empties+=recurseCountNoMessages(child)
@@ -183,39 +194,48 @@ def countEmpties(rootSet):
 
   def recurseCountEmpties(container):
     empties=0
-    if len(container.messages)==0 and len(container.children)==0:
+    if not container.messages and not container.children:
       empties+=1
       for child in container.children:
         empties+=recurseCountEmpties(child)
     return empties
 
   tot=0
-  for container in rootSet:
+  [count_factory(tot, recurseCountEmpties(container)) for container in rootSet]
+  '''for container in rootSet:
     tot+=recurseCountEmpties(container)
+    '''
   return tot
 
 def countNoMessagesTopLevel(rootSet):
   empties=0
-  for container in rootSet:
-    if len(container.messages)==0:
+  [count_factory(empties) for container in rootSet if not container.messages]
+  '''for container in rootSet:
+    if not container.messages:
       empties+=1
+      '''
   return empties
 
 def countTopLevelWithParents(rootSet):
   n=0
-  for container in rootSet:
-    if container.parent<>None:
+  [count_factory(n) for container in rootSet if not container.parent]
+  '''for container in rootSet:
+    if not container.parent:
       n+=1
+      '''
   return n
 
 def topLevelSubjectsUnique(rootSet):
   subjects=[]
   for container in rootSet:
-    if container.strippedSubject<>"" and container.strippedSubject in subjects:
+    if container.strippedSubject and container.strippedSubject in subjects:
       return 0
     subjects.append(container.strippedSubject)
   return 1
 
+def count_factory(var, val=1):
+  try: var+=val
+  except: var=val
 
 def recursePrune(container):
   ind=0
@@ -224,10 +244,11 @@ def recursePrune(container):
     child=container.children[ind]
     containersRemoved+=recursePrune(child)
 
-    if len(child.messages)==0 and len(child.children)==0:
+    #if not len(child.messages) and not len(child.children):
+    if not child.messages and not child.children:
       container.children.remove(child)
       containersRemoved+=1
-    elif len(child.messages)==0 and len(child.children)>0:
+    elif not child.messages and len(child.children):
       container.children+=child.children
       container.children.remove(child)
       containersRemoved+=1
@@ -243,18 +264,20 @@ def jwzThread(iterableMailbox):
   nMsgs=0
   nContainersAdded=0
   nDupMsgIDs=0
+  split = str.split
   for msg in iterableMailbox:
     nMsgs+=1
-    subjHeader=msg["subject"]
-    refsHeader=msg["references"]
-    msgIDHeader=msg["msgid"]
+    subjHeader=msg.get("subject","")
+    refsHeader=msg.get("references","")
+    msgIDHeader=msg.get("msgid","")
 
-    if idTable.has_key(msgIDHeader):
+    if msgIDHeader in idTable:
       thisMessageContainer=idTable[msgIDHeader]
       idTable[msgIDHeader].messages.append(msg)
-      if len(thisMessageContainer.messages)>1: # If duplicate message-id
-        nDupMsgIDs+=1
-        continue
+      if kMOduleVerbose:
+        if len(thisMessageContainer.messages)>1: # If duplicate message-id
+          nDupMsgIDs+=1
+          continue
     else:
       thisMessageContainer=messageContainer()
       thisMessageContainer.messageID=msgIDHeader
@@ -262,20 +285,23 @@ def jwzThread(iterableMailbox):
       thisMessageContainer.messages.append(msg)
       idTable[msgIDHeader]=thisMessageContainer
 
-    refs=refsHeader.split() # Naive but may be sufficient
+    #refs=refsHeader.split() # Naive but may be sufficient
+    refs = split(refsHeader)
 
     # Make sure that no reference is repeated. Weird
     # but it can happen.
-    ind=0
+    refs = list(set(refs))
+    '''ind=0
     while ind<len(refs):
       if refs.count(refs[ind])>1:
         del refs[ind]
       else:
         ind+=1
+        '''
 
-    irtHeader=msg["in_reply_to"]
+    irtHeader=msg.get("in_reply_to","")
     ans=kInAngleBracketsRE.search(irtHeader)
-    if ans<>None:
+    if ans:
       irtID=ans.group(1)
       # I understand that this can happen sometimes
       if irtID not in refs:
@@ -301,14 +327,14 @@ def jwzThread(iterableMailbox):
         idTable[nextRef]=nextContainer
 
       # First clause a PITA to find need for
-      if nextContainer.parent==None and \
-        not nextContainer in thisContainer.children and \
+      if not nextContainer.parent and \
+        nextContainer not in thisContainer.children and \
         not chaseChildrenForID(nextContainer,thisContainer.messageID) and \
         not chaseParentsForID(thisContainer,nextContainer.messageID):
         thisContainer.children.append(nextContainer)
         nextContainer.parent=thisContainer
 
-    if len(refs)>0:
+    if refs:
       lastRef=refs[-1]
       if idTable.has_key(lastRef):
         lastContainer=idTable[lastRef]
@@ -319,12 +345,12 @@ def jwzThread(iterableMailbox):
         idTable[lastRef]=lastContainer
 
       # If we've already got a parent, don't believe it.
-      if thisMessageContainer.parent<>None and thisMessageContainer.parent<>lastContainer:
+      if thisMessageContainer.parent and thisMessageContainer.parent is not lastContainer:
         thisMessageContainer.parent.children.remove(thisMessageContainer)
         thisMessageContainer.parent=None
 
-      if thisMessageContainer.parent==None and \
-        not thisMessageContainer in lastContainer.children and \
+      if not thisMessageContainer.parent and \
+        thisMessageContainer not in lastContainer.children and \
         not chaseChildrenForID(thisMessageContainer,lastContainer.messageID) and \
         not chaseParentsForID(lastContainer,thisMessageContainer.messageID):
         lastContainer.children.append(thisMessageContainer)
@@ -357,7 +383,7 @@ def jwzThread(iterableMailbox):
 
   rootSet=[]
   for container in idTable.values():
-    if container.parent==None:
+    if not container.parent:
       rootSet.append(container)
 
   if kModuleVerbose:
@@ -398,10 +424,10 @@ def jwzThread(iterableMailbox):
   ind=0
   while ind<len(rootSet):
     container=rootSet[ind]
-    if len(container.messages)==0 and len(container.children)==0:
+    if not container.messages and not container.children:
       del rootSet[ind]
       containersRemoved+=1
-    elif len(container.messages)==0 and len(container.children)==1:
+    elif not container.messages and container.children:
       rootSet[ind]=container.children[0]
       rootSet[ind].parent=None
       containersRemoved+=1
@@ -443,22 +469,22 @@ def jwzThread(iterableMailbox):
   subjectTable={}
   for thisContainer in rootSet:
     if len(thisContainer.messages)>0:
-      subjHeader=thisContainer.messages[0]["subject"]
+      subjHeader=thisContainer.messages[0].get("subject","")
     else:
-      subjHeader=thisContainer.children[0].messages[0]["subject"]
+      subjHeader=thisContainer.children[0].messages[0].get("subject","")
     strippedSubject=stripSubjJunk(subjHeader)
 
     thisContainer.subject=subjHeader
     thisContainer.strippedSubject=strippedSubject
 
-    if strippedSubject=="":
+    if not strippedSubject:
       continue
 
     if not subjectTable.has_key(strippedSubject):
       subjectTable[strippedSubject]=thisContainer
     else:
       containerInTable=subjectTable[strippedSubject]
-      if len(containerInTable.messages)>0 and len(thisContainer.messages)==0:
+      if containerInTable.messages and not thisContainer.messages:
         subjectTable[strippedSubject]=thisContainer
       elif len(containerInTable.subject)<>len(containerInTable.strippedSubject) and \
         len(thisContainer.subject)==len(thisContainer.strippedSubject):
@@ -482,13 +508,13 @@ def jwzThread(iterableMailbox):
       ind+=1
       continue
 
-    if len(thisContainer.messages)==0 and len(containerInTable.messages)==0:
+    if not thisContainer.messages and not containerInTable.messages:
       containerInTable.children+=thisContainer.children
       containersRemovedForSubj+=1
       del rootSet[ind]
       continue
 
-    if len(containerInTable.messages)==0:
+    if not containerInTable.messages:
       assert len(thisContainer.messages)>0
       containerInTable.children.append(thisContainer)
       del rootSet[ind]

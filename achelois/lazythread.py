@@ -6,9 +6,7 @@ structure of container:
     { 'msgids': [], 'subjects': [], 'messages': [] }
 '''
 
-import pdb
 import tools
-from weakref import WeakValueDictionary
 
 def stripSubject(subj):
     '''strips out all "re:"s and "fwd:"s'''
@@ -32,16 +30,17 @@ class convContainer(dict):
 
     def __repr__(self):
         self.ddate = self['messages'][0]['date']
+        self.dldate = self['messages'][-1]['date']
         self.dsender = u','.join([x['sender'].split()[0] for x in self['messages'][:3]])
         self.dcontained = len(self['messages'])
-        self.dsubject = stripSubject(self['messages'][0]['subject'])
+        self.dsubject = stripSubject(self['messages'][0].get(u'subject',u''))
         self.dlabels = u' '.join(u'+%s' % x for x in self['labels'])
-        self.dpreview = self['messages'][0]['content']
-        self.disprender = "\t%s\t%s\t%i\t%s %s %s" % \
-            (self.ddate, self.dsender, self.dcontained, self.dsubject, self.dlabels, self.dpreview)
+        self.dpreview = u' '.join(self['messages'][0].get(u'content',u'').split())[:30]
+        self.disprender = "\t0:%s -1:%s\t%s\t%i\t%s %s %s" % \
+            (self.ddate, self.dldate, self.dsender, self.dcontained, self.dsubject, self.dlabels, self.dpreview)
         return self.disprender
 
-class Thread(WeakValueDictionary):
+class Thread(dict):
     def __init__(self):
         self.threadList = []
 
@@ -57,7 +56,7 @@ class Thread(WeakValueDictionary):
 
     def sort(self):
         [msgobj['messages'].sort(key=lambda x: x['date']) for msgobj in self.threadList]
-        self.threadList.sort(key=lambda x: x['messages'][0]['date'])
+        self.threadList.sort(key=lambda x: x['messages'][-1]['date'])
 
     def by_msgid(self, key):
         return [msgobj for msgobj in self.thread \
@@ -73,43 +72,52 @@ class Thread(WeakValueDictionary):
             except: self[key] = msgobj
             else:
                 if self[key] is not msgobj:
-                    if lookingglass: pass
-                    else:
-                        lookingglass = True
+                    if self[key] not in duplist:
+                        duplist.append(self[key])
                         self.merge(self[key], msgobj)
+                        sumlist.extend([x for x in sum([msgobj['msgids'],msgobj['subjects']],[]) \
+                                            if x not in sumlist])
+                        self.threadList.remove(self[key])
                     self[key] = msgobj
 
-        lookingglass = False
+        duplist = []
         if one:
-            '''for msgid in sum([one['msgids'],one['subjects']],[]):
-                quack(x, one)
-                '''
-            [quack(x, one) for x in sum([one['msgids'],one['subjects']],[])]
+            sumlist = sum([one['msgids'],one['subjects']],[])
+            [quack(x, one) for x in sumlist]
         else:
             [quack(x, msgobj) for msgobj in self.threadList for x in \
                         sum([msgobj['msgids'],msgobj['subjects']],[])]
+
+    def merge(self, found, new):
+        new['msgids'].extend([x for x in found['msgids'] if x not in new['msgids']])
+        new['subjects'].extend([x for x in found['subjects'] if x not in new['subjects']])
+        new['labels'].extend([x for x in found['labels'] if x not in new['labels']])
+        new['messages'].extend(found['messages'])
 
     def append(self, data):
         self.threadList.append(data)
         self.dictify(data)
 
     def extend(self, key, msgobj):
-        index = self.threadList.index(self[key])
+        '''index = self.threadList.index(self[key])
         self.threadList[index]['msgids'] = list(set(sum(
                 [self.threadList[index]['msgids'],msgobj['msgids']],[])))
         self.threadList[index]['subjects'] = list(set(sum(
                 [self.threadList[index]['subjects'],msgobj['subjects']],[])))
         self.threadList[index]['messages'].extend(msgobj['messages'])
         self.dictify(self.threadList[index])
+        '''
+        self.merge(msgobj, self[key])
+        self.dictify(self[key])
 
     @property
     def msgid_list(self):
         return map(lambda x: x['msgids'], self.threadList)
 
     def thread(self, messages):
-        split = unicode.split
         get = dict.get
         deuniNone = tools.deuniNone
+        split = unicode.split
     
         for self.msg in messages:
             self.msg_refs = [[get(self.msg,u'in_reply_to',u'')],
@@ -118,18 +126,14 @@ class Thread(WeakValueDictionary):
             self.msg_refs = deuniNone(list(set(sum(self.msg_refs,[])))) #flatten and unique-ify
             self.msg_msgid = get(self.msg,u'msgid',u'')
             self.msg_subject = [stripSubject(get(self.msg,u'subject',u''))]
-            self.msg_labels = get(self.msg, u'labels', None)
+            self.msg_labels = get(self.msg, u'labels', u'')
 
-            if self.msg_labels:
+            if self.msg_labels and u'None' not in self.msg_labels:
                 self.msg_labels = deuniNone(split(self.msg_labels))
+            else: self.msg_labels = []
     
             self.loop_msgobj=convContainer(self.msg_refs, self.msg_subject,
                                                 self.msg_labels, [self.msg])
-            '''self.loop_msgobj={'msgids': self.msg_refs,
-                        'subjects': self.msg_subject,
-                        'messages': [self.msg]}
-                        '''
-
 
             # in case we're the first...
             if not self.threadList:
@@ -148,40 +152,13 @@ class Thread(WeakValueDictionary):
             if not self.threadFound:
                 self.append(self.loop_msgobj)
 
-        return self.threadList
-
-    def uniq_thread(self, umsgobj, ifnotuniq):
-        for uniqdent in sum([umsgobj['msgids'], umsgobj['subjects']],[]):
-            try: self[uniqdent]
-            except: pass
-            else: ifnotuniq
-
-    def merge(self, found, new):
-        gindex = self.threadList.index(found)
-        bindex = self.threadList.index(interloper)
-
-        #merge the two conversations
-        self.threadList[gindex]['msgids'] = flatnique([conv['msgids'],self.found['msgids']])
-        self.threadList[gindex]['subjects'] = flatnique([conv['subjects'],self.found['subjects']])
-        self.threadlist[gindex]['messages'].extend(self.found['messages'])
-
-    def squish(self):
-        flatnique = tools.flatnique
-        for conv in self.threadList:
-            for uniqident in sum([conv['msgids'], conv['subjects']],[]):
-                self.found = self[uniqident]
-                if self.found is not conv:
-                    gindex = self.threadList.index(conv)
-                    bindex = self.threadList.index(self.found)
-                    
-                    #merge the two conversations
-                    self.threadList[gindex]['msgids'] = flatnique([conv['msgids'],self.found['msgids']])
-                    self.threadList[gindex]['subjects'] = flatnique([conv['subjects'],self.found['subjects']])
-                    self.threadlist[gindex]['messages'].extend(self.found['messages'])
+        self.sort()
+        return
 
     def verify_thread(self):
         for conv in self.threadList:
             for uniqident in sum([conv['msgids'], conv['subjects']],[]):
                 self.found = self[uniqident]
                 if self.found is not conv:
+                    import pdb
                     pdb.set_trace()

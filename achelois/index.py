@@ -210,15 +210,19 @@ if __name__ == '__main__':
     print datetime.utcnow()
     #r = [ jwzthreading.make_message(msg) for msg in r]
     #r = jwzthreading.thread(r)
-    r = msgthread.thread(r)
+    msgthread.thread(r)
     print datetime.utcnow()
-    print len(r)
-    msgthread.squish()
+    print len(msgthread.threadList)
+    msgthread.verify_thread()
     print 'done threading!'
+    msgthread.sort()
+    print 'done sorting'
     #for y in r: print y
     #import inspect
     #print r
     #print len(r)
+    print msgthread.threadList[0]
+    print msgthread.threadList[-1]
     '''for i in r:
         #print inspect.getmembers(i)
         print i

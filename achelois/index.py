@@ -5,11 +5,6 @@ import tools
 from datetime import datetime
 import time
 
-import cProfile
-
-import threadMessages
-import jwzthreading
-
 import whoosh.index
 from whoosh.fields import ID, TEXT, KEYWORD, STORED, Schema
 from whoosh.writing import NO_MERGE, OPTIMIZE
@@ -165,11 +160,6 @@ class result_machine(object):
         self.refs = list(set(tools.flatten(self.refs)))
 
         [self.cacheadder('references', i) for i in self.refs if i not in self.cache['references']]
-        '''for i in self.refs:
-            if i in self.cache['references']: continue
-            self.newref = True
-            self.cache['references'].append(i)
-            '''
 
         if self.newref:
             # Last batch of messages found reference new messages.
@@ -197,26 +187,41 @@ class result_machine(object):
 
 
 if __name__ == '__main__':
+    import time
     #a = indexer()
     #a.index_all()
     import lazythread
-    msgthread = lazythread.Thread()
+    import jwzthreading
+    msgthread = lazythread.lazy_thread()
     q = result_machine('msgid')
     #r = q.start(u'*', sortkey=u'date')
     #p = Paginator(r, perpage=40)
     #for y in p.page(1): print y['date'], y['subject']
+    t = time.time()
     r = q.search('muuid:*', sortkey=u'date', resultlimit=50000000)
+    t  = time.time() - t
+    print 'search query took %r seconds' % t
+
+    t = time.time()
+    j = [jwzthreading.make_message(msg) for msg in r]
+    t  = time.time() - t
+    print 'turn results into jwz messages took %r seconds' % t
+    t = time.time()
+    j = jwzthreading.thread(j)
+    t  = time.time() - t
+    print 'jwzthreader took %r seconds' % t
+
+    t = time.time()
+    m = list(r)
+    t  = time.time() - t
+    print 'changing results to list took %r seconds' % t
     print 'going for broke - lets thread!'
-    print datetime.utcnow()
-    #r = [ jwzthreading.make_message(msg) for msg in r]
-    #r = jwzthreading.thread(r)
-    msgthread.thread(r)
-    print datetime.utcnow()
+    t = time.time()
+    msgthread.thread(m)
     print len(msgthread.threadList)
-    msgthread.verify_thread()
     print 'done threading!'
-    msgthread.sort()
-    print 'done sorting'
+    t  = time.time() - t
+    print 'message threading took %r seconds' % t
     #for y in r: print y
     #import inspect
     #print r

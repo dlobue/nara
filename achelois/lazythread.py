@@ -6,6 +6,9 @@ structure of container:
     { 'msgids': [], 'subjects': [], 'messages': [] }
 '''
 
+import pdb
+import tools
+from weakref import WeakValueDictionary
 
 def stripSubject(subj):
     '''strips out all "re:"s and "fwd:"s'''
@@ -13,14 +16,32 @@ def stripSubject(subj):
     strip = unicode.strip
     while 1:
         l = lower(subj)
-        if l.startswith('re:'):
+        if l.startswith(u're:') or l.startswith(u'fw:'):
             subj = strip(subj[3:])
-        elif l.startswith('fwd:'):
+        elif l.startswith(u'fwd:'):
             subj = strip(subj[4:])
         else:
             return subj
 
-class Thread(dict):
+class convContainer(dict):
+    def __init__(self, msgids, subjects, labels, messages):
+        self['msgids'] = msgids
+        self['subjects'] = subjects
+        self['messages'] = messages
+        self['labels'] = labels
+
+    def __repr__(self):
+        self.ddate = self['messages'][0]['date']
+        self.dsender = u','.join([x['sender'].split()[0] for x in self['messages'][:3]])
+        self.dcontained = len(self['messages'])
+        self.dsubject = stripSubject(self['messages'][0]['subject'])
+        self.dlabels = u' '.join(u'+%s' % x for x in self['labels'])
+        self.dpreview = self['messages'][0]['content']
+        self.disprender = "\t%s\t%s\t%i\t%s %s %s" % \
+            (self.ddate, self.dsender, self.dcontained, self.dsubject, self.dlabels, self.dpreview)
+        return self.disprender
+
+class Thread(WeakValueDictionary):
     def __init__(self):
         self.threadList = []
 
@@ -33,10 +54,6 @@ class Thread(dict):
     def __iter__(self):
         for msgobj in self.thread:
             yield msgobj
-
-    '''def __repr__(self):
-        return self.thread
-        '''
 
     def sort(self):
         [msgobj['messages'].sort(key=lambda x: x['date']) for msgobj in self.threadList]
@@ -52,9 +69,17 @@ class Thread(dict):
 
     def dictify(self, one=False):
         def quack(key, msgobj):
-            try: self[key]
+            try: found = self[key]
             except: self[key] = msgobj
-            else: pass
+            else:
+                if self[key] is not msgobj:
+                    if lookingglass: pass
+                    else:
+                        lookingglass = True
+                        self.merge(self[key], msgobj)
+                    self[key] = msgobj
+
+        lookingglass = False
         if one:
             '''for msgid in sum([one['msgids'],one['subjects']],[]):
                 quack(x, one)
@@ -84,21 +109,26 @@ class Thread(dict):
     def thread(self, messages):
         split = unicode.split
         get = dict.get
+        deuniNone = tools.deuniNone
     
         for self.msg in messages:
-            self.msg_refs = [[get(self.msg,'in_reply_to',u'')],
-                            [get(self.msg,'msgid')],
-                            split(get(self.msg,'references',u''))]
-            self.msg_refs = list(set(sum(self.msg_refs,[]))) #flatten and unique-ify
-            #self.msg_refs = [ref for ref in self.msg_refs if ref and not u'None'] #remove any null values
-            try: self.msg_refs.remove(u'None')
-            except: pass
-            self.msg_msgid = get(self.msg,'msgid',u'')
-            self.msg_subject = [stripSubject(get(self.msg,'subject',u''))]
+            self.msg_refs = [[get(self.msg,u'in_reply_to',u'')],
+                            [get(self.msg,u'msgid')],
+                            split(get(self.msg,u'references',u''))]
+            self.msg_refs = deuniNone(list(set(sum(self.msg_refs,[])))) #flatten and unique-ify
+            self.msg_msgid = get(self.msg,u'msgid',u'')
+            self.msg_subject = [stripSubject(get(self.msg,u'subject',u''))]
+            self.msg_labels = get(self.msg, u'labels', None)
+
+            if self.msg_labels:
+                self.msg_labels = deuniNone(split(self.msg_labels))
     
-            self.loop_msgobj={'msgids': self.msg_refs,
+            self.loop_msgobj=convContainer(self.msg_refs, self.msg_subject,
+                                                self.msg_labels, [self.msg])
+            '''self.loop_msgobj={'msgids': self.msg_refs,
                         'subjects': self.msg_subject,
                         'messages': [self.msg]}
+                        '''
 
 
             # in case we're the first...
@@ -119,3 +149,39 @@ class Thread(dict):
                 self.append(self.loop_msgobj)
 
         return self.threadList
+
+    def uniq_thread(self, umsgobj, ifnotuniq):
+        for uniqdent in sum([umsgobj['msgids'], umsgobj['subjects']],[]):
+            try: self[uniqdent]
+            except: pass
+            else: ifnotuniq
+
+    def merge(self, found, new):
+        gindex = self.threadList.index(found)
+        bindex = self.threadList.index(interloper)
+
+        #merge the two conversations
+        self.threadList[gindex]['msgids'] = flatnique([conv['msgids'],self.found['msgids']])
+        self.threadList[gindex]['subjects'] = flatnique([conv['subjects'],self.found['subjects']])
+        self.threadlist[gindex]['messages'].extend(self.found['messages'])
+
+    def squish(self):
+        flatnique = tools.flatnique
+        for conv in self.threadList:
+            for uniqident in sum([conv['msgids'], conv['subjects']],[]):
+                self.found = self[uniqident]
+                if self.found is not conv:
+                    gindex = self.threadList.index(conv)
+                    bindex = self.threadList.index(self.found)
+                    
+                    #merge the two conversations
+                    self.threadList[gindex]['msgids'] = flatnique([conv['msgids'],self.found['msgids']])
+                    self.threadList[gindex]['subjects'] = flatnique([conv['subjects'],self.found['subjects']])
+                    self.threadlist[gindex]['messages'].extend(self.found['messages'])
+
+    def verify_thread(self):
+        for conv in self.threadList:
+            for uniqident in sum([conv['msgids'], conv['subjects']],[]):
+                self.found = self[uniqident]
+                if self.found is not conv:
+                    pdb.set_trace()

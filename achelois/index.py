@@ -3,6 +3,7 @@ import os
 import mailbox
 import tools
 from datetime import datetime
+import time
 
 import cProfile
 
@@ -59,6 +60,8 @@ class indexer(object):
 
     def index_all(self):
         self.mtime = u'%s' % datetime.now().isoformat()
+
+        print '%s - started indexing' % datetime.now()
         for mdir in settings['maildirinc']:
             self.mpath = os.path.join(settings['rdir'], mdir)
             self.maild = mailbox.Maildir(self.mpath, factory=mailbox.MaildirMessage, create=False)
@@ -68,11 +71,13 @@ class indexer(object):
             self.maild._refresh()
 
             #for muuid, msg in self.maild.iteritems():
-            print 'indexing %s' % mdir
-            [self.parse(muuid, msg) for muuid,msg in self.maild.iteritems():]
+
+            print "%s - indexing %s" % (datetime.now(), mdir)
+            [self.parse(muuid, msg) for muuid,msg in self.maild.iteritems()]
     
-        print "writing out and optimizing index"
+        print "%s - writing out and optimizing index" % datetime.now()
         self.writer.commit(OPTIMIZE)
+        print "%s - writing complete" % datetime.now()
 
     def parse(self, muuid, msg):
         tmp = ' '.join([m.get_payload(decode=True) for m in \
@@ -92,9 +97,13 @@ class indexer(object):
         # FIXME: add in more robust error checking on unicode conversion.
         # ex- try guessing what the character that's giving us grief is.
         # fail that, just ignore the strangly encoded char
+        # _so far_ the above works. then again, all email I've tested
+        # was sent using a faily standard client, outlook, and downloaded
+        # off a faily standard imap server, exchange, and I've not
+        # received any emails encoded in anything exotic, like japanese or arabic
     
         msgid = u'%s' % msg['Message-ID']
-        sent_date = time.mktime(email.utils.parsedate(msg['date']))
+        sent_date = email.utils.parsedate(msg['date'])
 
         self.writer.add_document(subject=u'%s' % msg['Subject'],
                             muuid=unicode(muuid),
@@ -104,7 +113,7 @@ class indexer(object):
                             references=u'%s' % msg['References'],
                             recipient=u'%s' % msg['To'],
                             sender=u'%s' % msg['From'],
-                            date=u'%s' % sent_date,
+                            date=tools.uniencode_date(sent_date),
                             mtime=self.mtime,
                             labels=u'%s' % msg['Labels'],
                             content=ucontent,
@@ -122,9 +131,9 @@ class result_machine(object):
 
     def search(self, target, sortkey=None, resultlimit=5000):
         if sortkey is None:
-            reverse = True
-        else:
             reverse = False
+        else:
+            reverse = True
         self.query = self.parser.parse(target)
         self.results = self.searcher.search(self.query, limit=resultlimit, sortedby=sortkey, reverse=reverse)
         return self.results
@@ -188,15 +197,15 @@ class result_machine(object):
 
 
 if __name__ == '__main__':
-    a = indexer()
-    a.index_all()
+    #a = indexer()
+    #a.index_all()
     import lazythread
     msgthread = lazythread.Thread()
     q = result_machine('msgid')
     #r = q.start(u'*', sortkey=u'date')
     #p = Paginator(r, perpage=40)
     #for y in p.page(1): print y['date'], y['subject']
-    r = q.threadpage()
+    r = q.search('muuid:*', sortkey=u'date', resultlimit=50000000)
     print 'going for broke - lets thread!'
     print datetime.utcnow()
     #r = [ jwzthreading.make_message(msg) for msg in r]
@@ -204,10 +213,7 @@ if __name__ == '__main__':
     r = msgthread.thread(r)
     print datetime.utcnow()
     print len(r)
-    r.sort()
-    print r[0],'\n\n\n'
-    print r[-1]
-    #print r.sort()
+    msgthread.squish()
     print 'done threading!'
     #for y in r: print y
     #import inspect

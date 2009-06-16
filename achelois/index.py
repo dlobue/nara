@@ -202,22 +202,18 @@ if __name__ == '__main__':
     t  = time.time() - t
     print 'search query took %r seconds' % t
 
-    t = time.time()
-    j = [jwzthreading.make_message(msg) for msg in r]
-    t  = time.time() - t
-    print 'turn results into jwz messages took %r seconds' % t
-    t = time.time()
+    '''t = time.time()
+    j = [jwzthreading.make_message(msg) for msg in m]
     j = jwzthreading.thread(j)
     t  = time.time() - t
     print 'jwzthreader took %r seconds' % t
+    print len(j)
+    '''
 
-    t = time.time()
-    m = list(r)
-    t  = time.time() - t
-    print 'changing results to list took %r seconds' % t
     print 'going for broke - lets thread!'
     t = time.time()
-    msgthread.thread(m)
+    #m = list(r)
+    msgthread.thread(r)
     print len(msgthread.threadList)
     print 'done threading!'
     t  = time.time() - t
@@ -228,6 +224,7 @@ if __name__ == '__main__':
     #print len(r)
     print msgthread.threadList[0]
     print msgthread.threadList[-1]
+    for i in msgthread.threadList: print i
     '''for i in r:
         #print inspect.getmembers(i)
         print i

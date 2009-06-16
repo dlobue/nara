@@ -7,6 +7,7 @@ structure of container:
 '''
 
 import tools
+import threading
 import time
 
 def stripSubject(subj):
@@ -42,7 +43,7 @@ class convContainer(dict):
         self.dsubject = stripSubject(self['messages'][0].get(u'subject',u''))
         self.dlabels = u' '.join(u'+%s' % x for x in self['labels'])
         self.dpreview = u' '.join(self['messages'][0].get(u'content',u'').split())[:30]
-        self.disprender = "    %s\t%s\t%i\t%s %s %s" % \
+        self.disprender = "\t%s\t%s\t%i\t%s %s %s" % \
             (self.ddate, self.dsender, self.dcontained, self.dsubject, self.dlabels, self.dpreview)
         return self.disprender
 
@@ -67,6 +68,8 @@ class lazy_thread(dict):
         self.split = unicode.split
         self.deuniNone = tools.deuniNone
         self.flatnique = tools.flatnique
+
+        self._pthread = threading.Thread
 
     '''def __iter__(self):
         for msgobj in self.threadList:
@@ -138,10 +141,45 @@ class lazy_thread(dict):
         self.merge(msgobj, self[key])
         self.dictify(self[key])
 
+    def _init_thread(self, msg_chunk):
+        __current = self._pthread(target=self._msg_prep_chunk, args=(msg_chunk,))
+        self._text_threadlist.append(__current)
+        __current.start()
+    
+    def _msg_prep_chunk(self, chunk):
+        [self._msg_prep(msg) for msg in chunk]
+
     def thread(self, messages):
         self._text_prep = []
         t = time.time()
         [self._msg_prep(msg) for msg in messages]
+        t = time.time() - t
+        print 'non-threaded message processing took %r seconds' % t
+
+        def chunk_get(n):
+            return messages[__c_size*n:__c_size*(n+1)]
+
+        self._text_prep = []
+        self._text_threadlist = []
+
+        #I don't know why, but _msg_prep runs faster in its own thread
+        #the bigger the chunks the faster it goes. 
+        #keeping it in the main thread causes the method to more than 
+        #doubles the time needed to process. whatever.
+        __c_size=9000
+        __msg_len = len(messages)
+        if __msg_len % __c_size: __r = 1
+        else: __r = 0
+        __r_tot = __msg_len/__c_size+__r
+
+        __chunk_state = (chunk_get(n) for n in xrange(__r_tot))
+        t = time.time()
+        [self._init_thread(msg_chunk) for msg_chunk in __chunk_state]
+        [__thegoods.join() for __thegoods in self._text_threadlist]
+        t = time.time() - t
+        print 'threaded message processing took %r seconds' % t
+
+        t = time.time()
         [self._thread(msg) for msg in self._text_prep]
         t = time.time() - t
         print 'message threading took %r seconds' % t

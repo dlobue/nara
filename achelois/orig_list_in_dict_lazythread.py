@@ -48,11 +48,10 @@ class convContainer(dict):
             (self.ddate, self.dsender, self.dcontained, self.dsubject, self.dlabels, self.dpreview)
         return self.disprender
 
-class lazy_thread(object):
+class lazy_thread(dict):
     def __init__(self):
         #this is where all the good stuff is stored
         self.threadList = resultContainer()
-        self.thread_dict = {}
 
         #because calling a function once is faster
         #than calling it 9000 times.
@@ -64,28 +63,9 @@ class lazy_thread(object):
     def __getslice__(self, beg, end):
         return self.threadList.__getslice__(beg,end)
 
-    def __getitem__(self, name):
-        #this works because all keys are coming from our search results
-        #where _everything_ is unicode :)
-        try: name.__int__
-        except:
-            return self.thread_dict[name]
-        else:
-            return self.threadList[name]
-    
-    def __setitem__(self, name, value):
-        try: name.__int__
-        except:
-            self.thread_dict[name] = value
-        else:
-            self.threadList[name] = value
-
-    def __delitem__(self, name):
-        try: name.__int__
-        except:
-            del self.thread_dict[name]
-        else:
-            del self.threadList[name]
+    '''def __setslice__(self):
+        return self.threadList.__setslice__()
+        '''
 
     def count(self):
         return self.threadList.count()
@@ -140,13 +120,19 @@ class lazy_thread(object):
                         self.threadList.remove(self[key])
                     self[key] = msgobj
 
-        self.duplist = []
         if one:
+            self.duplist = []
             self.sumlist = sum([one['msgids'],one['subjects']],[])
             [quack(x, one) for x in self.sumlist]
             del self.sumlist, self.duplist
         else:
             [self.dictify(msgobj) for msgobj in self.threadList]
+            #FIXME: duplist will not function properly if we do a
+            #general dictify - there's no sumlist var I can extend!
+            #think of way to fix this
+            '''[quack(x, msgobj) for msgobj in self.threadList for x in \
+                        sum([msgobj['msgids'],msgobj['subjects']],[])]
+                        '''
 
     def merge(self, found, workobj):
         workobj['msgids'].extend([x for x in found['msgids'] if x not in workobj['msgids']])

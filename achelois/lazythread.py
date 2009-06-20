@@ -22,6 +22,8 @@ def stripSubject(subj):
         else:
             return subj
 
+class resultContainer(list): pass
+
 class convContainer(dict):
     def __init__(self, msgids, subjects, labels, messages):
         self['msgids'] = msgids
@@ -37,29 +39,19 @@ class convContainer(dict):
 
     def __repr__(self):
         self.ddate = self['messages'][-1]['date']
-        self.dsender = u','.join([x['sender'].split()[0].strip('"') for x in self['messages'][:3]])
+        self.dsender = u','.join([x['sender'].split()[0].strip('"') for x in self['messages'][-3:]])
         self.dcontained = len(self['messages'])
-        self.dsubject = stripSubject(self['messages'][0].get(u'subject',u''))
+        self.dsubject = stripSubject(self['messages'][-1].get(u'subject',u''))
         self.dlabels = u' '.join(u'+%s' % x for x in self['labels'])
-        self.dpreview = u' '.join(self['messages'][0].get(u'content',u'').split())[:30]
-        self.disprender = "    %s\t%s\t%i\t%s %s %s" % \
+        self.dpreview = u' '.join(self['messages'][-1].get(u'content',u'').split())
+        self.disprender = u"%s\t%s\t%i\t%s %s %s" % \
             (self.ddate, self.dsender, self.dcontained, self.dsubject, self.dlabels, self.dpreview)
         return self.disprender
 
 class lazy_thread(dict):
     def __init__(self):
         #this is where all the good stuff is stored
-        self.threadList = []
-
-        #Thread is a dict only as a convenience object
-        #and because list has less methods to copy over than
-        #a dict would ;)
-        self.__getslice__ = self.threadList.__getslice__
-        self.__setslice__ = self.threadList.__setslice__
-        self.__len__ = self.threadList.__len__
-        self.__iter__ = self.threadList.__len__
-        self.count = self.threadList.count
-        self.reverse = self.threadList.reverse
+        self.threadList = resultContainer()
 
         #because calling a function once is faster
         #than calling it 9000 times.
@@ -68,10 +60,25 @@ class lazy_thread(dict):
         self.deuniNone = tools.deuniNone
         self.flatnique = tools.flatnique
 
-    '''def __iter__(self):
+    def __getslice__(self, beg, end):
+        return self.threadList.__getslice__(beg,end)
+
+    '''def __setslice__(self):
+        return self.threadList.__setslice__()
+        '''
+
+    def count(self):
+        return self.threadList.count()
+
+    def reverse(self):
+        return self.threadList.reverse()
+
+    def __iter__(self):
         for msgobj in self.threadList:
             yield msgobj
-            '''
+
+    def __len__(self):
+        return self.threadList.__len__()
 
     def __x_msgid(self,x):
         return x['msgid']
@@ -85,6 +92,7 @@ class lazy_thread(dict):
     def sort(self):
         [msgobj['messages'].sort(key=self.__x_date) for msgobj in self.threadList]
         self.threadList.sort(key=self.__x_newest_msg_date)
+        self.threadList.reverse()
 
     @property
     def msgid_list(self):
@@ -140,11 +148,11 @@ class lazy_thread(dict):
 
     def thread(self, messages):
         self._text_prep = []
-        t = time.time()
+        #t = time.time()
         [self._msg_prep(msg) for msg in messages]
         [self._thread(msg) for msg in self._text_prep]
-        t = time.time() - t
-        print 'message threading took %r seconds' % t
+        #t = time.time() - t
+        #print 'message threading took %r seconds' % t
 
         self.sort()
         return

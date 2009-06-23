@@ -4,7 +4,9 @@ import urwid.curses_display
 import urwid
 
 import lazythread
-import index
+#import index
+
+import imapthread
 
 #class convContainer(dict):
 def _callback(fn):
@@ -105,8 +107,8 @@ class myWalker(urwid.SimpleListWalker):
 class Screen:
     def __init__(self, tui):
         self.tui = tui
-        self.result_machine = index.result_machine('msgid')
-        self.unsortlist = self.result_machine.search('muuid:*', sortkey=u'date', resultlimit=50000000)
+        #self.result_machine = index.result_machine('msgid')
+        #self.unsortlist = self.result_machine.search('muuid:*', sortkey=u'date', resultlimit=50000000)
         self.thread = lazythread.lazy_thread()
 
     def addLine(self, text):
@@ -148,7 +150,8 @@ class Screen:
         self.frame.set_focus('footer')
 
         self.redisplay()
-        self.thread.thread(self.unsortlist)
+        imapthread._thread_init(self.addLine2)
+        #self.thread.thread(self.unsortlist)
         #self.threadwalker._modified()
         #for i in dir(self.threadwalker): self.addLine2(i)
         #self.threadview_list.extend([urwid.Text(x.__repr__()[:self.size[0]]) for x in self.thread])

@@ -2,6 +2,7 @@
 
 import urwid.curses_display
 import urwid
+import collections
 
 import lazythread
 #import index
@@ -129,7 +130,7 @@ class Screen:
         self.size = self.tui.get_cols_rows()
 
         self.lines = [urwid.Text('Hello')]
-        self.lines2 = [urwid.Text('Hello2')]
+        self.lines2 = collections.deque([urwid.Text('Hello2')],500)
         #self.listbox = urwid.ListBox(self.lines)
         self.threadview_list = []
         #self.threadwalker = urwid.SimpleListWalker(self.threadview_list)

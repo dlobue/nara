@@ -60,6 +60,7 @@ class lazy_thread(object):
         self.split = unicode.split
         self.deuniNone = tools.deuniNone
         self.flatnique = tools.flatnique
+        self.unidecode_date = tools.unidecode_date
 
     def __getslice__(self, beg, end):
         return self.threadList.__getslice__(beg,end)
@@ -98,16 +99,18 @@ class lazy_thread(object):
             yield msgobj
 
     def __len__(self):
-        return self.threadList.__len__()
+        return len(self.threadList)
 
     def __x_msgid(self,x):
         return x['msgid']
 
     def __x_date(self,x):
-        return x['date']
+        #return x['date']
+        return self.unidecode_date(x['date'])
 
     def __x_newest_msg_date(self,x):
-        return x['messages'][-1]['date']
+        #return x['messages'][-1]['date']
+        return self.unidecode_date(x['messages'][-1]['date'])
 
     def sort(self):
         [msgobj['messages'].sort(key=self.__x_date) for msgobj in self.threadList]

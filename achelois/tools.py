@@ -14,7 +14,8 @@ def flatnique(x):
 
 def unidecode_date(x):
     '''turn a unicoded date string made using uniencode_date back into a datetime object'''
-    return datetime(map(int, x.split(u','))[:6])
+    y = map(int, x.split(u','))
+    return datetime(y[0], y[1], y[2], y[3], y[4], y[5])
 
 def uniencode_date(x):
     '''turn a datetime tuple into a unicode string seperated by commas'''

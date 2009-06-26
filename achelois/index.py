@@ -38,6 +38,7 @@ schema = Schema(subject=TEXT(stored=True),
                 date=ID(stored=True),
                 mtime=ID(stored=True),
                 labels=KEYWORD(stored=True),
+                flags=KEYWORD(stored=True),
                 content=TEXT(stored=True))
 
 class indexer(object):
@@ -111,12 +112,13 @@ class indexer(object):
                             date=tools.uniencode_date(sent_date),
                             mtime=self.mtime,
                             labels=u'%s' % msg['Labels'],
+                            flags=u' '.join([u'%s' x for x in msg.get_flags()])
                             content=ucontent,
                             _stored_content=ucontent[:80])
 
 
 class result_machine(object):
-    def __init__(self, pri_field=u"subject"):
+    def __init__(self, pri_field=u"muuid"):
         self.storage = store.FileStorage(settings['ixmetadir'])
         self.ix = whoosh.index.Index(self.storage)
         self.ix = whoosh.index.open_dir(settings['ixmetadir'])

@@ -8,6 +8,7 @@ import lazythread
 import index
 
 import pickle
+import weakref
 
 #import imapthread
 
@@ -31,8 +32,12 @@ class callback_list(list):
     
 #class conv_repr(lazythread.convContainer):
 class conv_repr(dict):
+    __metaclass__ = urwid.MetaSignals
+    signals = ['keypress']
+
     def __init__(self, msgids, subjects, labels, messages):
         self.widget = urwid.Button('Loading')
+        urwid.Signals.connect(self.widget, 'keypress', self.load_msg)
 
         self['msgids'] = msgids
         self['subjects'] = subjects
@@ -57,6 +62,9 @@ class conv_repr(dict):
         try: urwid.Signals.emit(screen.thread.threadList, "modified")
         except: pass
 
+    def load_msg(self):
+        buffer_manager.get_buffer(self)
+
     def __repr__(self):
         self.ddate = self['messages'][-1]['date']
         self.dsender = u','.join([x['sender'].split()[0].strip('"') for x in self['messages'][-3:]])
@@ -70,22 +78,60 @@ class conv_repr(dict):
 
 
 class conv_widget(urwid.Button):
+    __metaclass__ = urwid.MetaSignals
+    signals = ['keypress']
+
     def set_label(self, label):
         self.label = label
-        self.w = Columns([
+        self.w = urwid.Text( label, wrap='strip' )
+        '''self.w-no = urwid.Columns([
             ('fixed', 1, self.button_left),
             urwid.Text( label ),
             ('fixed', 1, self.button_right)],
             dividechars=1)
+            '''
         self._invalidate()
 
     def keypress(self, (maxcol,), key):
-        if key not in something:
+        if key not in (' ','enter'):
             return key
-        somewhere.message_state_machine(self.messages)
-        newwin(showmessages)
+        urwid.Signals.emit(self, 'keypress')
 
 lazythread.convContainer = conv_repr
+
+class buffer_manager(object):
+    _buffers = weakref.WeakKeyDictionary()
+    _rbufferobj = None
+    _supported = {}
+    _noremove = ()
+
+    @classmethod
+    def register_rootobj(cls, rbufferobj):
+        cls._rbufferobj = rbufferobj
+
+    @classmethod
+    def register_buffertype(cls, buffer_type, buffer_class):
+        cls._supported.setdefault(buffer_type, buffer_class)
+
+    @classmethod
+    def _new_buffer(cls, data):
+        buffer_type = type(data)
+        try: newbuffer = _supported[buffer_type]
+        except: raise TypeError("Don't know how to make a buffer for that type of object")
+        else: return cls._buffers.setdefault(data, newbuffer(data))
+
+    @classmethod
+    def get_buffer(cls, data):
+        try: bufferdisp = cls._buffers[data]
+        except: bufferdisp = cls._new_buffer(data)
+        cls._rbufferobj(bufferdisp)
+
+    @classmethod
+    def destroy(cls, data):
+        if cls._buffers[data] not in cls.noremove:
+            try: del cls._buffers[data]
+            except: pass
+
 
 class myWalker(urwid.SimpleListWalker):
     def get_focus(self):
@@ -135,18 +181,8 @@ class Screen:
 
         self.lines = [urwid.Text('Hello')]
         self.lines2 = collections.deque([urwid.Text('Hello2')],500)
-        #self.listbox = urwid.ListBox(self.lines)
-        #self.threadview_list = []
-        #self.threadwalker = urwid.SimpleListWalker(self.thread)
-        #self.threadwalker = urwid.SimpleListWalker([])
-        #self.thread.threadList.__new__(urwid.SimpleListWalker)
         self.thread.threadList = myWalker([])
-        #urwid.Signals.connect(self.thread.threadList, "modified", self.thread.threadList._modified())
-        #self.threadwalker = self.thread.threadList
         self.listbox = urwid.ListBox(self.thread.threadList)
-        #self.listbox = urwid.ListBox(self.threadview_list)
-        #self.threadwalker = urwid.PollingListWalker(self.thread.threadList)
-        #self.listbox = urwid.ListBox(self.threadwalker)
         self.listbox2 = urwid.ListBox(self.lines2)
         self.input = urwid.Edit()
         #self.summarytxt = urwid.Text('inbox, blalkjsdfn %i threads' % len(self.thread), align='left')
@@ -163,11 +199,6 @@ class Screen:
         self.unsortlist = list(self.unsortlist)
         self.unsortlist.reverse()
         self.thread.thread(self.unsortlist[500*self.c:500*(self.c+1)])
-        #self.threadwalker._modified()
-        #for i in dir(self.threadwalker): self.addLine2(i)
-        #self.threadview_list.extend([urwid.Text(x.__repr__()[:self.size[0]]) for x in self.thread])
-        #self.threadwalker.extend([urwid.Text(x.__repr__()[:self.size[0]]) for x in self.thread])
-        #self.listbox.set_focus(len(self.thread) - 1)
         self.redisplay()
 
         self.focused_listbox = self.listbox

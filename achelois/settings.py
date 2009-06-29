@@ -1,4 +1,4 @@
-{
+settings = {
     "ixmetadir": "/tank/projects/emailtest/index_dir", 
     "maildirinc": [
         "INBOX", 

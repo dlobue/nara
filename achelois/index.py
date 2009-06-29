@@ -31,6 +31,7 @@ inuse_message_cache = None
 schema = Schema(subject=TEXT(stored=True),
                 recipient=TEXT(stored=True),
                 sender=TEXT(stored=True),
+                cc=TEXT(stored=True),
                 muuid=ID(stored=True, unique=True),
                 msgid=ID(stored=True),
                 in_reply_to=KEYWORD(stored=True),
@@ -109,10 +110,11 @@ class indexer(object):
                             references=u'%s' % msg['References'],
                             recipient=u'%s' % msg['To'],
                             sender=u'%s' % msg['From'],
+                            cc=u'%s' % msg['Cc'],
                             date=tools.uniencode_date(sent_date),
                             mtime=self.mtime,
                             labels=u'%s' % msg['Labels'],
-                            flags=u' '.join([u'%s' x for x in msg.get_flags()])
+                            flags=u' '.join([u'%s' % x for x in msg.get_flags()]),
                             content=ucontent,
                             _stored_content=ucontent[:80])
 

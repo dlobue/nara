@@ -2,7 +2,7 @@
 
 import urwid.curses_display
 import urwid
-import collections
+import collections.deque
 import tools
 
 import lazythread
@@ -12,17 +12,18 @@ import weakref
 
 from buffer import buffer_manager
 from offlinemaildir import mail_sources
-from message_machine import chunkify
+#from message_machine import chunkify
 
-from achelois.lib.view-util import callback_list
+from achelois.lib.view_util import callback_list
+from achelois.lib.view_conversation import read_walker
 
-import email, mailbox
+#import email, mailbox
 #from weakkeyordereddict import WeakKeyOrderedDict
 
 #import imapthread
 
 mymail = mail_sources()
-state_mech = chunkify()
+#state_mech = chunkify()
 
 class conv_repr(dict):
     __metaclass__ = urwid.MetaSignals
@@ -56,9 +57,14 @@ class conv_repr(dict):
         except: pass
 
     def load_msg(self):
+        s = read_walker(self.messages)
+        try: buffer_manager.set_buffer(s)
+        except:
+            buffer_manager.register_support(s, view_conversation)
+            buffer_manager.set_buffer(s)
         #msg_get = (mymail.get(x['muuid']) for x in self.messages)
         #bodies = (u' '.join([m.get_payload(decode=True) for m in email.iterators.typed_subpart_iterator(msg) if 'filename' not in m.get('Content-Disposition','')]) for msg in messages)
-        self.msg_collection = []
+        """self.msg_collection = []
 
         def plaintext(chunk):
             for state,part in chunk:
@@ -87,6 +93,7 @@ class conv_repr(dict):
 
         #widgetize = [urwid.Text(txt) for txt in bodies]
         buffer_manager.set_buffer(urwid.PollingListWalker(self.msg_collection))
+        """
 
     def __repr__(self):
         self.ddate = self['messages'][-1]['date']
@@ -98,149 +105,6 @@ class conv_repr(dict):
         self.disprender = "%s   %s   %i   %s %s %s" % \
             (self.ddate, self.dsender, self.dcontained, self.dsubject, self.dlabels, self.dpreview)
         return self.disprender
-
-state_dict = {
-            'BLOCK': 'block quote',
-            'HTML': 'html-encoded text',
-            'QUOTE': 'quotted text',
-            'DUNNO': 'not sure what block is',
-            'ATTACHMENT': 'attached file',
-            }
-
-
-class conversation_widget(urwid.WidgetWrap):
-    ''' This widget is not meant for direct use.
-    conv is the conv_repr.messages of the particular conversation
-    msg is the return from the index for the message we're on
-    mindex is index of the msg we're on in conv
-    index is the position in the results from the state machine
-    display are the contents of the state we're in
-    '''
-
-    def __init__(self, conv, msg=None, mindex=0, index=None, display=None):
-        self.conv = conv
-        self.msg = msg
-        self.mindex = mindex
-        self.index = index
-
-        if not msg:
-            self.msg = self.conv[0]
-
-        if not display: display = 'Loading'
-        widget = urwid.Text(display)
-        self.widget = widget
-        w = urwid.AttrWrap(widget, None)
-        self.__super.__init__(w)
-
-    def selectable(self):
-        return True
-
-    def keypress(self, (maxcol,), key):
-        return key
-
-    def first_part(self):
-        return None
-
-    def last_part(self):
-        return None
-
-    def next_inorder(self):
-        part = self.first_part()
-        if part: return part
-        if self.index is not None:
-            #from here find cached message_widget
-            return 
-        try: return self.conv[self.mindex+1]
-        except: return None
-
-    def prev_inorder(self):
-        if self.mindex == 0: return None
-        try: return self.conv[self.mindex-1]
-        except: return None
-
-
-def get_cached_message(index):
-    try: return _message_cache[index]
-    except: return message_widget
-
-class display_conversation(object):
-    _inst_buffers = weakref.WeakKeyDictionary
-
-    @classmethod
-    def get_conv(cls, conv):
-        try: _inst_buffers[conv]
-        except:
-            _inst_buffers.setdefault(conv,[])
-
-class machined_widget(conversation_widget):
-    def __init__(self, conv, msg, mindex, index, contents):
-        state, part = contents
-        self.state = state
-        self.contents = part
-        if state == 'MSG':
-            self.expanded = True
-        else:
-            self.expanded = False
-        self.__super.__init__(conv, index, msg)
-        self.update_widget()
-
-    def update_widget(self):
-        if self.expanded:
-            display = self.contents
-        else:
-            display = '+--- %s, enter or space to expand' % state_dict[self.state]
-        self.widget.set_text(display)
-
-class message_widget(conversation_widget):
-    def __init__(self, conv, msg, mindex, index=None):
-        #FIXME: add in support for labels and Cc targets
-        self.headers = u'From: %s\nSent: %s\nTo: %s\nSubject: %s\n\n' % \
-                (msg['sender'], tools.unidecode_date(msg['date']), msg['recipient'], msg['subject'])
-        self._cache = None
-
-        if 'S' in msg['flags']:
-            self.expanded = False
-        else:
-            self.expanded = True
-
-        self.__super.__init__(conv, index, msg)
-        self.update_widget()
-
-    def update_widget(self):
-        if self.expanded:
-            display = self.headers
-        else:
-            display = u"%s %s %s" % \
-                (tools.unidecode_date(msg['date']), msg['sender'], msg['subject']))
-        self.widget.set_text(display)
-
-    def keypress(self, (maxcol,), key):
-        if key in (" ", "enter"):
-            self.expanded = not self.expanded
-            self.update_widget()
-        else:
-            return self.__super.keypress((maxcol,), key)
-
-    @property
-    def machined(self):
-        if not self._cache:
-            self._cache = self._process()
-        return self._cache
-
-    def _process(self):
-        msg_get = mymail.get(self.msg['muuid'])
-        res = state_mech.process(msg_get)
-        return res
-
-    def first_part(self):
-        if not self.expanded:
-            return None
-        return self.machined[0]
-
-    def last_part(self):
-        if not self.expanded:
-            return None
-        return self.machined[-1]
 
 
 class conv_widget(urwid.Button):
@@ -327,13 +191,14 @@ class Screen(object):
         canvas = self.frame.render(self.size, focus=True)
         self.tui.draw_screen(self.size, canvas)
 
-    def set_buffer(self, buffer):
+    def set_buffer(self, buffer, hackity=False):
+        if hackity:
+            buffer = hackity(buffer)
         self.frame.set_body(buffer)
         self.focused_listbox = buffer
 
     def run(self):
         self.size = self.tui.get_cols_rows()
-        a = urwid.PollingListWalker([x for x in xrange(2)])
 
         #self.summarytxt = urwid.Text('inbox, blalkjsdfn %i threads' % len(self.thread), align='left')
         self.summarytxt = urwid.Text('inbox, blalkjsdfn number threads', align='left')
@@ -352,8 +217,6 @@ class Screen(object):
         self.thread.threadList = thread_walker([])
         buffer_manager.register_support(self.thread.threadList, thread_index)
         buffer_manager.register_support(self.lines2, info_log)
-        buffer_manager.register_support(a, view_conversation)
-        del a
 
         #self.listbox = urwid.ListBox(self.thread.threadList)
         #self.listbox2 = urwid.ListBox(self.lines2)

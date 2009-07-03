@@ -14,13 +14,16 @@ from whoosh.qparser import QueryParser
 from whoosh.searching import Paginator
 
 from string import punctuation
+from settings import settings
 
+'''
 import simplejson
 
 global settings
 f = open('settings.json', 'r')
 settings = simplejson.loads(f.read())
 f.close()
+'''
 
 global badchars
 badchars = dict(map(lambda x: (ord(x), None), punctuation))

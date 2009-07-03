@@ -7,6 +7,7 @@ def _callback(fn):
     return wrapper
 
 class callback_list(list):
+    def __hash__(self): return id(self)
     def __init__(self, parentmethod):
         self.parentmethod = parentmethod
 

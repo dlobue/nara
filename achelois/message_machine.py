@@ -1,5 +1,4 @@
-import email
-import mailbox
+import email.iterators
 
 '''
 def chunkify(rawmail):
@@ -7,26 +6,25 @@ def chunkify(rawmail):
     return ostandin
     '''
 
-class chunkify(object):
+class msg_machine(object):
 
     block_start = ('________________________________', '-----Original Message-----')
 
-    def __init__(self):
-        self.state_results = []
-
-    def process(self, message):
+    @classmethod
+    def process(cls, message):
+        cls.state_results = []
         for subpart in email.iterators.typed_subpart_iterator(message):
             if 'filename' in subpart.get('Content-Disposition',''):
-                self._is_attachment(subpart)
+                cls._is_attachment(subpart)
                 continue
             if subpart.get_content_maintype() == 'text':
                 subtype = subpart.get_content_subtype() 
-                if subtype == 'html': self._is_html(subpart)
-                elif subtype == 'plain': self._is_plaintxt(subpart)
-                else: self._is_dunno(subpart)
-            else: self._is_dunno(subpart)
+                if subtype == 'html': cls._is_html(subpart)
+                elif subtype == 'plain': cls._is_plaintxt(subpart)
+                else: cls._is_dunno(subpart)
+            else: cls._is_dunno(subpart)
 
-        return self.state_results
+        return cls.state_results
 
     def _is_html(self, subpart):
         self.state_results.append(['HTML', subpart])
@@ -72,7 +70,8 @@ class chunkify(object):
 
         _flush()
 
-        self.state_results.append(tuple(['PLAINTXT', subpart_states]))
+        #self.state_results.append(tuple(['PLAINTXT', subpart_states]))
+        self.state_results.extend(subpart_states)
 
     def _is_dunno(self, subpart):
         self.state_results.append(['DUNNO', subpart])

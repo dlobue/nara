@@ -1,4 +1,4 @@
-import weakref
+import weakref.WeakKeyDictionary
 
 class buffer_manager(object):
     #__metaclass__ = urwid.MetaSignals

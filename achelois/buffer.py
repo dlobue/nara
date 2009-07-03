@@ -1,10 +1,12 @@
-import weakref.WeakKeyDictionary
+#import weakref.WeakKeyDictionary
+from weakref import WeakKeyDictionary
 
 class buffer_manager(object):
     #__metaclass__ = urwid.MetaSignals
     #signals = ['buffer_update']
 
-    _buffers = weakref.WeakKeyDictionary()
+    #_buffers = weakref.WeakKeyDictionary()
+    _buffers = WeakKeyDictionary()
     #_buffers = WeakKeyOrderedDict()
     _rbufferobj = None
     _supported = {}

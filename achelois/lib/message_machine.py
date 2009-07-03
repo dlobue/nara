@@ -26,21 +26,23 @@ class msg_machine(object):
 
         return cls.state_results
 
-    def _is_html(self, subpart):
-        self.state_results.append(['HTML', subpart])
+    @classmethod
+    def _is_html(cls, subpart):
+        cls.state_results.append(['HTML', subpart])
 
-    def _is_plaintxt(self, subpart):
+    @classmethod
+    def _is_plaintxt(cls, subpart):
         subpart_states = []
         subpart_gen = (line for line in subpart.get_payload().splitlines())
 
-        self.appendee = []
-        self.prev_state = 'MSG'
+        cls.appendee = []
+        cls.prev_state = 'MSG'
         tolerance = 0
 
         def _flush():
-            if self.appendee:
-                subpart_states.append(tuple([self.prev_state, u'\n'.join(self.appendee)]))
-            self.appendee = []
+            if cls.appendee:
+                subpart_states.append(tuple([cls.prev_state, u'\n'.join(cls.appendee)]))
+            cls.appendee = []
 
         while 1:
             try: line = subpart_gen.next()
@@ -48,33 +50,35 @@ class msg_machine(object):
             else:
                 if line == '': pass
             #if not line: break
-            if line in self.block_start:
+            if line in cls.block_start:
                 _flush()
-                self.prev_state = 'BLOCK'
+                cls.prev_state = 'BLOCK'
                 tolerance = 1
-                self.appendee.append(line)
+                cls.appendee.append(line)
             elif line.startswith('>'):
                 _flush()
-                self.prev_state = 'QUOTE'
-                self.appendee.append(line)
+                cls.prev_state = 'QUOTE'
+                cls.appendee.append(line)
             elif line.startswith('From:'):
                 if tolerance == 1:
                     tolerance = 0
-                    self.appendee.append(line)
+                    cls.appendee.append(line)
                     continue
                 _flush()
-                self.prev_state = 'BLOCK'
-                self.appendee.append(line)
+                cls.prev_state = 'BLOCK'
+                cls.appendee.append(line)
             else:
-                self.appendee.append(line)
+                cls.appendee.append(line)
 
         _flush()
 
-        #self.state_results.append(tuple(['PLAINTXT', subpart_states]))
-        self.state_results.extend(subpart_states)
+        #cls.state_results.append(tuple(['PLAINTXT', subpart_states]))
+        cls.state_results.extend(subpart_states)
 
-    def _is_dunno(self, subpart):
-        self.state_results.append(['DUNNO', subpart])
+    @classmethod
+    def _is_dunno(cls, subpart):
+        cls.state_results.append(['DUNNO', subpart])
 
-    def _is_attachment(self, subpart):
-        self.state_results.append(['ATTACHMENT', subpart])
+    @classmethod
+    def _is_attachment(cls, subpart):
+        cls.state_results.append(['ATTACHMENT', subpart])

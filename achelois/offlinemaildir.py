@@ -1,5 +1,5 @@
 import os.path
-import mailbox.Maildir, mailbox.MaildirMessage
+import mailbox
 #import email
 
 from settings import settings

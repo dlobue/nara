@@ -1,4 +1,11 @@
 from achelois.lib.message_machine import msg_machine
+from achelois import offlinemaildir
+from achelois import tools
+
+from weakref import WeakKeyDictionary
+import urwid
+
+mymail = offlinemaildir.mail_sources()
 
 state_dict = {
             'BLOCK': 'block quote',
@@ -8,6 +15,57 @@ state_dict = {
             'ATTACHMENT': 'attached file',
             }
 
+attr_dict = {
+            'BLOCK': 'block quote',
+            'HTML': 'html',
+            'QUOTE': 'block quote',
+            'DUNNO': 'dunno',
+            'ATTACHMENT': 'attachment',
+            }
+
+
+class message_machine(list):
+    def __init__(self, conv, mindex, muuid):
+        self.muuid = muuid
+        msg_get = mymail.get(muuid)
+        processed = msg_machine.process(msg_get)
+        self.extend((machined_widget(conv, mindex, idx, data) for idx,data in enumerate(processed)))
+
+class conversation_cache(object):
+    #_inst_buffers = weakref.WeakKeyDictionary()
+    _inst_buffers = WeakKeyDictionary()
+
+    @classmethod
+    def get_conv(cls, conv):
+        try: return cls._inst_buffers[conv]
+        except:
+            cls._inst_buffers.setdefault(conv,{'msgs':conv, 'parts':{}, 'headers':{}})
+            return cls.get_conv(conv)
+
+    @classmethod
+    def get_msg(cls, conv, mindex):
+        try: return cls._inst_buffers[conv]['parts'][mindex]
+        except:
+            muuid = cls.get_conv(conv)['msgs'][mindex]['muuid']
+            cls._inst_buffers[conv]['parts'][mindex] = message_machine(conv, mindex, muuid)
+            return cls.get_msg(conv, mindex)
+
+    @classmethod
+    def get_mindex(cls, conv, mindex):
+        try: return cls._inst_buffers[conv]['msgs'][mindex]
+        except:
+            return cls.get_conv(conv)['msgs'][mindex]
+
+    @classmethod
+    def get_part(cls, conv, mindex, index):
+        if index is None:
+            try: return cls._inst_buffers[conv]['headers'][mindex]
+            except:
+                r = cls.get_mindex(conv, mindex)
+                cls._inst_buffers[conv]['headers'][mindex] = message_widget(conv, mindex)
+                return cls.get_part(conv, mindex, index)
+        try: return cls._inst_buffers[conv]['parts'][mindex][index]
+        except: return cls.get_msg(conv, mindex)[index]
 
 class conversation_widget(urwid.WidgetWrap):
     ''' This widget is not meant for direct use.
@@ -17,15 +75,14 @@ class conversation_widget(urwid.WidgetWrap):
     display are the contents of the state we're in
     '''
 
-    def __init__(self, conv, mindex=0, index=None, display=None):
+    def __init__(self, conv, mindex=0, index=None, attr=None, focus_attr=None):
         self.conv = conv
         self.mindex = mindex
         self.index = index
 
-        if not display: display = 'Loading'
-        widget = urwid.Text(display)
+        widget = urwid.Text('Loading')
         self.widget = widget
-        w = urwid.AttrWrap(widget, None)
+        w = urwid.AttrWrap(widget, attr, focus_attr)
         self.__super.__init__(w)
 
     def selectable(self):
@@ -61,58 +118,18 @@ class conversation_widget(urwid.WidgetWrap):
             return r
         return None
 
-class message_machine(list):
-    def __init__(self, conv, mindex, muuid):
-        self.muuid = muuid
-        msg_get = mymail.get(muuid)
-        processed = state_mech.process(msg_get)
-        self.extend((machined_widget(conv, mindex, idx, data) for idx,data in enumerate(processed)))
-
-class conversation_cache(object):
-    _inst_buffers = weakref.WeakKeyDictionary()
-
-    @classmethod
-    def get_conv(cls, conv):
-        try: return cls._inst_buffers[conv]
-        except:
-            cls._inst_buffers.setdefault(conv,{'msgs':conv, 'parts':{}, 'headers':{}})
-            return cls.get_conv(conv)
-
-    @classmethod
-    def get_msg(cls, conv, mindex):
-        try: return cls._inst_buffers[conv]['parts'][mindex]
-        except:
-            muuid = cls.get_conv(conv)['msgs'][mindex]['muuid']
-            cls._inst_buffers[conv]['parts'][mindex] = message_machine(conv, mindex, muuid)
-            return cls.get_msg(conv, mindex)
-
-    @classmethod
-    def get_mindex(cls, conv, mindex):
-        try: return cls._inst_buffers[conv]['msgs'][mindex]
-        except:
-            return cls.get_conv(conv)['msgs'][mindex]
-
-    @classmethod
-    def get_part(cls, conv, mindex, index):
-        if index is None:
-            try: return cls._inst_buffers[conv]['headers'][mindex]
-            except:
-                r = cls.get_mindex(conv, mindex)
-                cls._inst_buffers[conv]['headers'][mindex] = message_widget(conv, mindex)
-                return cls.get_part(conv, mindex, index)
-        try: return cls._inst_buffers[conv]['parts'][mindex][index]
-        except: return cls.get_msg(conv, mindex)[index]
-
 class machined_widget(conversation_widget):
     def __init__(self, conv, mindex, index, contents):
         state, part = contents
         self.state = state
-        self.contents = part
+        self.contents = '\n%s' % part
         if state == 'MSG':
             self.expanded = True
+            attr = 'new msg'
         else:
             self.expanded = False
-        self.__super.__init__(conv, mindex, index)
+            attr = attr_dict[state]
+        self.__super.__init__(conv, mindex, index, attr, 'focus')
         self.update_widget()
 
     def update_widget(self):
@@ -136,7 +153,7 @@ class message_widget(conversation_widget):
     def __init__(self, conv, mindex):
         msg = conv[mindex]
         #FIXME: add in support for labels and Cc targets
-        self.headers = u'From: %s\nSent: %s\nTo: %s\nSubject: %s\n\n' % \
+        self.headers = u'From: %s\nSent: %s\nTo: %s\nSubject: %s' % \
                 (msg['sender'], tools.unidecode_date(msg['date']), msg['recipient'], msg['subject'])
         self.condensed = u"%s %s %s" % \
                 (tools.unidecode_date(msg['date']), msg['sender'], msg['subject'])
@@ -149,7 +166,7 @@ class message_widget(conversation_widget):
                 self.expanded = True
         except: self.expanded = True
 
-        self.__super.__init__(conv, mindex, None)
+        self.__super.__init__(conv, mindex, None, 'new headers', 'focus headers')
         self.update_widget()
 
     def update_widget(self):
@@ -178,7 +195,12 @@ class message_widget(conversation_widget):
 
 class read_walker(urwid.ListWalker):
     def __init__(self, conv):
-        begin = conversation_cache.get_part(conv, 0, None)
+        #begin = conversation_cache.get_part(conv, 0, None)
+        for n in xrange(len(conv)):
+            try:
+                try: trashvar = conversation_cache.get_part(conv, n, 0)
+                except: trashvar = conversation_cache.get_part(conv, n, None)
+            except: pass
         self.conv = conv
         self.focus = 0, None
 

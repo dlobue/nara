@@ -2,7 +2,7 @@
 
 import urwid.curses_display
 import urwid
-import collections.deque
+import collections
 import tools
 
 import lazythread
@@ -11,7 +11,7 @@ import index
 import weakref
 
 from buffer import buffer_manager
-from offlinemaildir import mail_sources
+#from offlinemaildir import mail_sources
 #from message_machine import chunkify
 
 from achelois.lib.view_util import callback_list
@@ -22,7 +22,7 @@ from achelois.lib.view_conversation import read_walker
 
 #import imapthread
 
-mymail = mail_sources()
+#mymail = mail_sources()
 #state_mech = chunkify()
 
 class conv_repr(dict):
@@ -107,13 +107,20 @@ class conv_repr(dict):
         return self.disprender
 
 
-class conv_widget(urwid.Button):
+class conv_widget(urwid.WidgetWrap):
     __metaclass__ = urwid.MetaSignals
     signals = ['keypress']
 
+    def selectable(self): return True
+
+    def __init__(self, label):
+        self.__super.__init__(None)
+        self.set_label( label )
+
     def set_label(self, label):
         self.label = label
-        self.w = urwid.Text( label, wrap='clip' )
+        w = urwid.Text( label, wrap='clip' )
+        self.w = urwid.AttrWrap( w, 'body', 'focus' )
         '''self.w-no = urwid.Columns([
             ('fixed', 1, self.button_left),
             urwid.Text( label ),
@@ -122,21 +129,16 @@ class conv_widget(urwid.Button):
             '''
         self._invalidate()
 
-    def update_w(self):
-        if self.selected:
-            self._w.attr = 'selected'
-            self._w.focus_attr = 'selected focus'
-        else:
-            self._w.attr = 'body'
-            self._w.focus_attr = 'focus'
+    def get_label(self):
+        return self.label
 
     def keypress(self, (maxcol,), key):
         if key not in (' ','enter'):
             return key
         urwid.Signals.emit(self, 'keypress')
 
-lazythread.convContainer = conv_repr
 
+lazythread.convContainer = conv_repr
 
 class thread_walker(urwid.SimpleListWalker):
     def get_focus(self):
@@ -159,6 +161,9 @@ class view_conversation(urwid.ListBox): pass
 class info_log_list(collections.deque):
     def __hash__(self): return id(self)
 
+
+keymap_alias = {'k':'up', 'j':'down', 'h':'left', 'l':'right', 'J':'page down', 'K':'page up'}
+
 class Screen(object):
     __metaclass__ = urwid.MetaSignals
     signals = ['buffer_update']
@@ -168,10 +173,21 @@ class Screen(object):
             ('selected', 'white', 'black', ('bold')),
             ('focus', 'light blue', 'black', ('bold')),
             ('selected focus', 'light cyan', 'black', ('bold')),
+            ('test', 'yellow', 'dark cyan'),
+            ('status', 'white', 'dark blue'),
+            ('read headers', 'black', 'dark green'),
+            ('new headers', 'black', 'dark cyan', ('standout')),
+            ('focus headers', 'white', 'dark cyan'),
+            ('read msg', 'light gray', 'black'),
+            ('new msg', 'white', 'black'),
+            ('attachment', 'dark green', 'black'),
+            ('block quote', 'brown', 'black'),
+            ('dunno', 'light magenta', 'black'),
+            ('html', 'light green', 'black'),
             ]
-    def __init__(self, tui):
-        self.tui = tui
-        self.tui.register_palette(self.palette)
+    def __init__(self):
+        #self.tui = tui
+        #self.tui.register_palette(self.palette)
         self.result_machine = index.result_machine()
         self.unsortlist = self.result_machine.search('*', sortkey=u'date', resultlimit=50000000)
         self.thread = lazythread.lazy_thread()
@@ -191,17 +207,22 @@ class Screen(object):
         canvas = self.frame.render(self.size, focus=True)
         self.tui.draw_screen(self.size, canvas)
 
-    def set_buffer(self, buffer, hackity=False):
-        if hackity:
-            buffer = hackity(buffer)
+    def set_buffer(self, buffer):
         self.frame.set_body(buffer)
         self.focused_listbox = buffer
 
+    def main(self):
+        self.tui = urwid.curses_display.Screen()
+        self.tui.register_palette(self.palette)
+        self.tui.run_wrapper(self.run)
+
     def run(self):
         self.size = self.tui.get_cols_rows()
+        cols, rows = self.size
 
         #self.summarytxt = urwid.Text('inbox, blalkjsdfn %i threads' % len(self.thread), align='left')
-        self.summarytxt = urwid.Text('inbox, blalkjsdfn number threads', align='left')
+        summarytxt = urwid.Text('inbox, blalkjsdfn number threads', align='left')
+        self.summarytxt = urwid.AttrWrap(summarytxt, 'status')
         self.input = urwid.Edit()
         self.bframe = urwid.Pile([self.summarytxt, self.input])
         self.body_loading = urwid.ListBox([urwid.Text('Loading....')])
@@ -213,10 +234,11 @@ class Screen(object):
         buffer_manager.register_rootobj(self.set_buffer)
 
         self.lines = None
-        self.lines2 = info_log_list([urwid.Text('Hello2')],500)
+        self.lines2 = info_log_list([urwid.Text(('test','hello2'))],500)
         self.thread.threadList = thread_walker([])
         buffer_manager.register_support(self.thread.threadList, thread_index)
         buffer_manager.register_support(self.lines2, info_log)
+
 
         #self.listbox = urwid.ListBox(self.thread.threadList)
         #self.listbox2 = urwid.ListBox(self.lines2)
@@ -239,11 +261,16 @@ class Screen(object):
         while 1:
             keys = self.tui.get_input()
 
+            if 'Q' in keys:
+                break
+
             for key in keys:
                 if key == 'window resize':
                     self.size = self.tui.get_cols_rows()
-                elif key in ('up', 'down', 'page up', 'page down'):
-                    self.focused_listbox.keypress(self.size, key)
+                #elif key in ('up', 'down', 'page up', 'page down'):
+                    #self.focused_listbox.keypress(self.size, key)
+                elif key in ('h','j','k','l','J','K'):
+                    key = keymap_alias[key]
                 elif key == 'f1':
                     #self.frame.set_body(self.listbox)
                     #self.listbox = buffer_manager.set_buffer(self.thread.threadList)
@@ -257,12 +284,14 @@ class Screen(object):
                 elif key == 't':
                     self.c += 1
                     self.thread.thread(self.unsortlist[500*self.c:500*(self.c+1)])
-                else:
-                    self.frame.keypress(self.size, key)
+
+                self.frame.keypress(self.size, key)
 
                 self.redisplay()
 
 if __name__ == '__main__':
-    tui = urwid.curses_display.Screen()
-    screen = Screen(tui)
-    tui.run_wrapper(screen.run)
+    screen = Screen()
+    screen.main()
+    #tui = urwid.curses_display.Screen()
+    #screen = Screen(tui)
+    #tui.run_wrapper(screen.run)

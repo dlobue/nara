@@ -3,17 +3,13 @@ setup.py
 achelois/__init__.py
 achelois/buffer.py
 achelois/cui.py
-achelois/doubler.py
 achelois/imapthread.py
 achelois/index.py
-achelois/jwzthreading.py
 achelois/keymap.py
 achelois/lazythread.py
-achelois/message_machine.py
 achelois/offlinemaildir.py
-achelois/orig_list_in_dict_lazythread.py
+achelois/ordereddict.py
 achelois/settings.py
-achelois/threadedex-lazythread.py
 achelois/tools.py
 achelois/weakkeyordereddict.py
 achelois.egg-info/PKG-INFO
@@ -24,6 +20,7 @@ achelois.egg-info/not-zip-safe
 achelois.egg-info/requires.txt
 achelois.egg-info/top_level.txt
 achelois/lib/__init__.py
+achelois/lib/message_machine.py
 achelois/lib/view_conversation.py
 achelois/lib/view_util.py
 achelois/urwid/__init__.py

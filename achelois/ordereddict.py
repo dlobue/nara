@@ -12,12 +12,12 @@
 #
 
 from collections import MutableMapping
-from weakref import WeakKeyDictionary, proxy as _proxy
+from weakref import proxy as _proxy
 
 class _Link(object):
     __slots__ = 'prev', 'next', 'key', '__weakref__'
  
-class WeakKeyOrderedDict(WeakKeyDictionary, MutableMapping):
+class OrderedDict(dict, MutableMapping):
     'Dictionary that remembers insertion order'
     # An inherited dict maps keys to values.
     # The inherited dict provides __getitem__, __len__, __contains__, and get.

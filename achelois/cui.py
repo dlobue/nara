@@ -4,26 +4,15 @@ import urwid.curses_display
 import urwid
 import collections
 import tools
+import weakref
 
 import lazythread
 import index
-
-import weakref
-
 from buffer import buffer_manager
-#from offlinemaildir import mail_sources
-#from message_machine import chunkify
-
 from achelois.lib.view_util import callback_list
-from achelois.lib.view_conversation import read_walker
-
-#import email, mailbox
-#from weakkeyordereddict import WeakKeyOrderedDict
+from achelois.lib.view_conversation import read_walker, conversation_cache
 
 #import imapthread
-
-#mymail = mail_sources()
-#state_mech = chunkify()
 
 class conv_repr(dict):
     __metaclass__ = urwid.MetaSignals
@@ -57,7 +46,8 @@ class conv_repr(dict):
         except: pass
 
     def load_msg(self):
-        s = read_walker(self.messages)
+        #s = read_walker(self.messages)
+        s = self.messages
         try: buffer_manager.set_buffer(s)
         except:
             buffer_manager.register_support(s, view_conversation)
@@ -157,7 +147,15 @@ class thread_walker(urwid.SimpleListWalker):
 
 class thread_index(urwid.ListBox): pass
 class info_log(urwid.ListBox): pass
-class view_conversation(urwid.ListBox): pass
+class view_conversation(urwid.ListBox):
+    def __init__(self, body):
+        self.stack = read_walker(body)
+        self.__super.__init__(self.stack)
+
+    def __del__(self):
+        assert 0 == 1
+        del self.stack
+
 class info_log_list(collections.deque):
     def __hash__(self): return id(self)
 
@@ -166,7 +164,7 @@ keymap_alias = {'k':'up', 'j':'down', 'h':'left', 'l':'right', 'J':'page down', 
 
 class Screen(object):
     __metaclass__ = urwid.MetaSignals
-    signals = ['buffer_update']
+    signals = ['log','buffer_update']
 
     palette = [
             ('body', 'light gray', 'black'),
@@ -189,9 +187,7 @@ class Screen(object):
         #self.tui = tui
         #self.tui.register_palette(self.palette)
         self.result_machine = index.result_machine()
-        self.unsortlist = self.result_machine.search('*', sortkey=u'date', resultlimit=50000000)
         self.thread = lazythread.lazy_thread()
-        #urwid.Signals.connect(buffer_manager, 'buffer_update', set_buffer)
 
     def addLine(self, text):
         self.lines.append(urwid.Text(text))
@@ -239,6 +235,10 @@ class Screen(object):
         buffer_manager.register_support(self.thread.threadList, thread_index)
         buffer_manager.register_support(self.lines2, info_log)
 
+        #urwid.register_signal(buffer_manager, ['log'])
+        #urwid.Signals.register(conversation_cache, ['log'])
+        #urwid.Signals.connect(buffer_manager, 'log', self.addLine2)
+        #urwid.Signals.connect(conversation_cache, 'log', self.addLine2)
 
         #self.listbox = urwid.ListBox(self.thread.threadList)
         #self.listbox2 = urwid.ListBox(self.lines2)
@@ -251,8 +251,10 @@ class Screen(object):
         self.redisplay()
         #imapthread._thread_init(self.addLine2)
         self.c = 0
-        self.unsortlist = list(self.unsortlist)
+        self.unsortlist = list(self.result_machine.search('*', sortkey=u'date', resultlimit=50000000))
+        #self.unsortlist = list(self.unsortlist)
         self.unsortlist.reverse()
+        #self.thread.thread(self.unsortlist)
         self.thread.thread(self.unsortlist[500*self.c:500*(self.c+1)])
         self.redisplay()
 
@@ -265,12 +267,16 @@ class Screen(object):
                 break
 
             for key in keys:
+                if key in ('h','j','k','l','J','K'):
+                    key = keymap_alias[key]
+
+                if key == 'x':
+                    buffer_manager.destroy()
+
                 if key == 'window resize':
                     self.size = self.tui.get_cols_rows()
                 #elif key in ('up', 'down', 'page up', 'page down'):
                     #self.focused_listbox.keypress(self.size, key)
-                elif key in ('h','j','k','l','J','K'):
-                    key = keymap_alias[key]
                 elif key == 'f1':
                     #self.frame.set_body(self.listbox)
                     #self.listbox = buffer_manager.set_buffer(self.thread.threadList)
@@ -281,11 +287,17 @@ class Screen(object):
                     #self.listbox2 = buffer_manager.set_buffer(self.lines2)
                     buffer_manager.set_buffer(self.lines2)
                     #self.focused_listbox = self.listbox2
+                elif key == 'b':
+                    buffer_manager.set_next()
+                elif key == 'B':
+                    buffer_manager.set_prev()
                 elif key == 't':
                     self.c += 1
                     self.thread.thread(self.unsortlist[500*self.c:500*(self.c+1)])
-
-                self.frame.keypress(self.size, key)
+                else:
+                    self.frame.keypress(self.size, key)
+                    if key == 'x':
+                        self.addLine2(str(conversation_cache._inst_buffers.items()))
 
                 self.redisplay()
 

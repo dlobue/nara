@@ -22,6 +22,8 @@ def stripSubject(subj):
         else:
             return subj
 
+class resultContainer(list): pass
+
 class convContainer(dict):
     def __init__(self, msgids, subjects, labels, messages):
         self['msgids'] = msgids
@@ -49,7 +51,7 @@ class convContainer(dict):
 class lazy_thread(object):
     def __init__(self):
         #this is where all the good stuff is stored
-        self.threadList = []
+        self.threadList = resultContainer()
         self.thread_dict = {}
 
         #because calling a function once is faster
@@ -115,7 +117,6 @@ class lazy_thread(object):
         self.threadList.sort(key=self.__x_newest_msg_date)
         self.threadList.reverse()
 
-    '''
     @property
     def msgid_list(self):
         return map(self.__x_msgid, self.threadList)
@@ -127,7 +128,6 @@ class lazy_thread(object):
     def by_subject(self, key):
         return [msgobj for msgobj in self.thread \
                     if key in msgobj['subjects']]
-        '''
 
     def dictify(self, one=False):
         def quack(key, msgobj):
@@ -152,13 +152,10 @@ class lazy_thread(object):
             [self.dictify(msgobj) for msgobj in self.threadList]
 
     def merge(self, found, workobj):
-        def fun(key):
-            return [x for x in found[key] if x not in workobj[key]]
-
-        workobj['msgids'].extend(fun('msgids'))
-        workobj['subjects'].extend(fun('subjects'))
-        workobj['labels'].extend(fun('labels'))
-        workobj['messages'].extend(fun('messages'))
+        workobj['msgids'].extend([x for x in found['msgids'] if x not in workobj['msgids']])
+        workobj['subjects'].extend([x for x in found['subjects'] if x not in workobj['subjects']])
+        workobj['labels'].extend([x for x in found['labels'] if x not in workobj['labels']])
+        workobj['messages'].extend(found['messages'])
 
     def append(self, data):
         self.threadList.append(data)
@@ -169,11 +166,10 @@ class lazy_thread(object):
         self.dictify(self[key])
 
     def thread(self, messages):
-        #self._text_prep = []
+        self._text_prep = []
         #t = time.time()
-        _text_prep = [self._msg_prep(msg) for msg in messages]
-        [self._thread(msg) for msg in _text_prep]
-        #[self._thread(msg) for msg in self._text_prep]
+        [self._msg_prep(msg) for msg in messages]
+        [self._thread(msg) for msg in self._text_prep]
         #t = time.time() - t
         #print 'message threading took %r seconds' % t
 
@@ -186,7 +182,7 @@ class lazy_thread(object):
         __inreplyto = self.get(msg,u'in_reply_to',u'')
         __msgid = self.get(msg,u'msgid')
         __refs = self.split(self.get(msg,u'references',u''))
-        msg_refs = [[__inreplyto],[__msgid],__refs]
+        self.msg_refs = [[__inreplyto],[__msgid],__refs]
 
         '''self.msg_refs = [[self.get(msg,u'in_reply_to',u'')],
                         [self.get(msg,u'msgid')],
@@ -194,21 +190,19 @@ class lazy_thread(object):
                         '''
 
         #next flattens, unique-ifys, and removes unicode None's
-        msg_refs = self.deuniNone(self.flatnique(msg_refs))
-        msg_msgid = self.get(msg,u'msgid',u'')
-        msg_subject = [stripSubject(self.get(msg,u'subject',u''))]
-        msg_labels = self.get(msg, u'labels', u'')
+        self.msg_refs = self.deuniNone(self.flatnique(self.msg_refs))
+        self.msg_msgid = self.get(msg,u'msgid',u'')
+        self.msg_subject = [stripSubject(self.get(msg,u'subject',u''))]
+        self.msg_labels = self.get(msg, u'labels', u'')
 
         #hate this, but it helps us avoid unnecessary processing
-        if msg_labels and msg_labels != u'None':
-            msg_labels = self.deuniNone(self.split(msg_labels))
-        else: msg_labels = []
+        if self.msg_labels and self.msg_labels != u'None':
+            self.msg_labels = deuniNone(split(self.msg_labels))
+        else: self.msg_labels = []
 
-        loop_msgobj=convContainer(msg_refs, msg_subject,
-                                    msg_labels, [msg])
-
-        return loop_msgobj
-        #self._text_prep.append(loop_msgobj)
+        self.loop_msgobj=convContainer(self.msg_refs, self.msg_subject,
+                                            self.msg_labels, [msg])
+        self._text_prep.append(self.loop_msgobj)
 
     def _thread(self, msg):
         '''does the actual threading'''

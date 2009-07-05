@@ -198,14 +198,13 @@ if __name__ == '__main__':
     #a = indexer()
     #a.index_all()
     import lazythread
-    import jwzthreading
     msgthread = lazythread.lazy_thread()
-    q = result_machine('msgid')
+    q = result_machine()
     #r = q.start(u'*', sortkey=u'date')
     #p = Paginator(r, perpage=40)
     #for y in p.page(1): print y['date'], y['subject']
     t = time.time()
-    r = q.search('muuid:*', sortkey=u'date', resultlimit=50000000)
+    r = q.search('*', sortkey=u'date', resultlimit=50000000)
     t  = time.time() - t
     print 'search query took %r seconds' % t
 
@@ -219,7 +218,10 @@ if __name__ == '__main__':
 
     print 'going for broke - lets thread!'
     t = time.time()
-    #m = list(r)
+    r = list(r)
+    t  = time.time() - t
+    print 'message "listing" took %r seconds' % t
+    t = time.time()
     msgthread.thread(r)
     print len(msgthread.threadList)
     print 'done threading!'
@@ -231,7 +233,10 @@ if __name__ == '__main__':
     #print len(r)
     print msgthread.threadList[0]
     print msgthread.threadList[-1]
-    for i in msgthread.threadList: print i
+    while 1:
+        foo = input('what now? ')
+        if 'q' in foo.lower():  break
+    #for i in msgthread.threadList: print i
     '''for i in r:
         #print inspect.getmembers(i)
         print i

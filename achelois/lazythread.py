@@ -6,21 +6,74 @@ structure of container:
     { 'msgids': [], 'subjects': [], 'messages': [] }
 '''
 
-import tools
+#import tools
+from tools import flatnique, deuniNone, unidecode_date
 import time
+from weakref import WeakValueDictionary
 
 def stripSubject(subj):
     '''strips out all "re:"s and "fwd:"s'''
     lower = unicode.lower
     strip = unicode.strip
+    _container = []
+    _last = 0
     while 1:
         l = lower(subj)
         if l.startswith(u're:') or l.startswith(u'fw:'):
             subj = strip(subj[3:])
         elif l.startswith(u'fwd:'):
             subj = strip(subj[4:])
+        #elif u':' in subj[_last:]:
+            #rawr, fixme!
+            #_container.append(subj[:subj.index(u':')])
         else:
             return subj
+
+
+def asciisplitstripSubject(subj):
+    '''alternate method of removing unwanted "re:"s and "fwd:"s'''
+    lower = str.lower
+    strip = str.strip
+    split = str.split
+    startswith = str.startswith
+    subj = str(subj)
+
+    def striplower(l):
+        return strip(lower(l))
+
+    def minifunc(bit):
+        if len(bit) <= 3:
+            b = striplower(bit)
+            if startswith(b, 're') or startswith(b, 'fw'):
+                return
+        return bit
+    #subj = subj.split(':')
+    subj = split(subj, ':')
+    subj = filter(minifunc,subj)
+    #return [minifunc(x) for x in subj if x]
+    return deuniNone(map(strip,subj))
+
+def splitstripSubject(subj):
+    '''alternate method of removing unwanted "re:"s and "fwd:"s'''
+    lower = unicode.lower
+    strip = unicode.strip
+    split = unicode.split
+    startswith = unicode.startswith
+
+    def striplower(l):
+        return strip(lower(l))
+
+    def minifunc(bit):
+        if len(bit) <= 3:
+            b = striplower(bit)
+            if startswith(b, 're') or startswith(b, 'fw'):
+                return
+        return bit
+    #subj = subj.split(':')
+    subj = split(subj, u':')
+    subj = filter(minifunc,subj)
+    #return [minifunc(x) for x in subj if x]
+    return deuniNone(map(strip,subj))
 
 class convContainer(dict):
     def __init__(self, msgids, subjects, labels, messages):
@@ -36,29 +89,27 @@ class convContainer(dict):
         self.labels = self['labels']
 
     def __repr__(self):
-        self.ddate = self['messages'][-1]['date']
-        self.dsender = u','.join([x['sender'].split()[0].strip('"') for x in self['messages'][-3:]])
-        self.dcontained = len(self['messages'])
-        self.dsubject = stripSubject(self['messages'][-1].get(u'subject',u''))
-        self.dlabels = u' '.join(u'+%s' % x for x in self['labels'])
-        self.dpreview = u' '.join(self['messages'][-1].get(u'content',u'').split())
-        self.disprender = u"%s\t%s\t%i\t%s %s %s" % \
-            (self.ddate, self.dsender, self.dcontained, self.dsubject, self.dlabels, self.dpreview)
-        return self.disprender
+        ddate = self['messages'][-1]['date']
+        dsender = u','.join([x['sender'].split()[0].strip('"') for x in self['messages'][-3:]])
+        dcontained = len(self['messages'])
+        dsubject = stripSubject(self['messages'][-1].get(u'subject',u''))
+        dlabels = u' '.join(u'+%s' % x for x in self['labels'])
+        dpreview = u' '.join(self['messages'][-1].get(u'content',u'').split())
+        disprender = u"%s\t%s\t%i\t%s %s %s" % \
+            (ddate, dsender, dcontained, dsubject, dlabels, dpreview)
+        return disprender
 
 class lazy_thread(object):
     def __init__(self):
         #this is where all the good stuff is stored
         self.threadList = []
-        self.thread_dict = {}
+        self.thread_dict = WeakValueDictionary()
+        #self.thread_dict = {}
 
         #because calling a function once is faster
         #than calling it 9000 times.
         self.get = dict.get
         self.split = unicode.split
-        self.deuniNone = tools.deuniNone
-        self.flatnique = tools.flatnique
-        self.unidecode_date = tools.unidecode_date
 
     def __getslice__(self, beg, end):
         return self.threadList.__getslice__(beg,end)
@@ -104,11 +155,11 @@ class lazy_thread(object):
 
     def __x_date(self,x):
         #return x['date']
-        return self.unidecode_date(x['date'])
+        return unidecode_date(x['date'])
 
     def __x_newest_msg_date(self,x):
         #return x['messages'][-1]['date']
-        return self.unidecode_date(x['messages'][-1]['date'])
+        return unidecode_date(x['messages'][-1]['date'])
 
     def sort(self):
         [msgobj['messages'].sort(key=self.__x_date) for msgobj in self.threadList]
@@ -194,15 +245,20 @@ class lazy_thread(object):
                         '''
 
         #next flattens, unique-ifys, and removes unicode None's
-        msg_refs = self.deuniNone(self.flatnique(msg_refs))
+        msg_refs = deuniNone(flatnique(msg_refs))
         msg_msgid = self.get(msg,u'msgid',u'')
-        msg_subject = [stripSubject(self.get(msg,u'subject',u''))]
+        #msg_subject = [stripSubject(self.get(msg,u'subject',u''))]
+        msg_subject = stripSubject(self.get(msg,u'subject',u''))
+        #msg_subject = splitstripSubject(self.get(msg,u'subject',u''))
+        #msg_subject = asciisplitstripSubject(self.get(msg,u'subject',u''))
         msg_labels = self.get(msg, u'labels', u'')
 
         #hate this, but it helps us avoid unnecessary processing
         if msg_labels and msg_labels != u'None':
-            msg_labels = self.deuniNone(self.split(msg_labels))
+            msg_labels = deuniNone(self.split(msg_labels))
         else: msg_labels = []
+        if u':' in msg_subject: msg_subject = splitstripSubject(msg_subject)
+        else: msg_subject = [msg_subject]
 
         loop_msgobj=convContainer(msg_refs, msg_subject,
                                     msg_labels, [msg])

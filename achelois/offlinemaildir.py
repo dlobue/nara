@@ -1,6 +1,5 @@
 import os.path
 import mailbox
-#import email
 
 from settings import settings
 

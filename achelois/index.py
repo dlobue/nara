@@ -73,13 +73,14 @@ class indexer(object):
             #for muuid, msg in self.maild.iteritems():
 
             print "%s - indexing %s" % (datetime.now(), mdir)
-            [self.parse(muuid, msg) for muuid,msg in self.maild.iteritems()]
+            [self.parse(muuid) for muuid in self.maild.iterkeys()]
     
         print "%s - writing out and optimizing index" % datetime.now()
         self.writer.commit(OPTIMIZE)
         print "%s - writing complete" % datetime.now()
 
-    def parse(self, muuid, msg):
+    def parse(self, muuid):
+        msg = self.maild.get_message(muuid)
         tmp = ' '.join([m.get_payload(decode=True) for m in \
                 email.iterators.typed_subpart_iterator(msg) \
                 if 'filename' not in m.get('Content-Disposition','')])
@@ -104,6 +105,7 @@ class indexer(object):
     
         msgid = u'%s' % msg['Message-ID']
         sent_date = email.utils.parsedate(msg['date'])
+        mflags = u' '.join([u'%s' % x for x in msg.get_flags()])
 
         self.writer.add_document(subject=u'%s' % msg['Subject'],
                             muuid=unicode(muuid),
@@ -117,7 +119,7 @@ class indexer(object):
                             date=tools.uniencode_date(sent_date),
                             mtime=self.mtime,
                             labels=u'%s' % msg['Labels'],
-                            flags=u' '.join([u'%s' % x for x in msg.get_flags()]),
+                            flags=mflags,
                             content=ucontent,
                             _stored_content=ucontent[:80])
 

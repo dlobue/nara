@@ -6,10 +6,9 @@ def chunkify(rawmail):
     return ostandin
     '''
 
+block_start = ('________________________________', '-----Original Message-----')
+
 class msg_machine(object):
-
-    block_start = ('________________________________', '-----Original Message-----')
-
     @classmethod
     def process(cls, message):
         cls.state_results = []
@@ -32,47 +31,47 @@ class msg_machine(object):
 
     @classmethod
     def _is_plaintxt(cls, subpart):
+        #rstrip = unicode.rstrip
         subpart_states = []
-        subpart_gen = (line for line in subpart.get_payload().splitlines())
+        subpart_gen = (line for line in subpart.get_payload(decode=True).splitlines())
 
         cls.appendee = []
         cls.prev_state = 'MSG'
         tolerance = 0
 
-        def _flush():
+        def _flush(newstate, theline):
             if cls.appendee:
                 subpart_states.append(tuple([cls.prev_state, u'\n'.join(cls.appendee)]))
+                #subpart_states.append(tuple([cls.prev_state, u''.join(cls.appendee)]))
             cls.appendee = []
+            if newstate != 'eof':
+                cls.prev_state = newstate
+                cls.appendee.append(theline)
 
         while 1:
             try: line = subpart_gen.next()
             except StopIteration: break
-            else:
-                if line == '': pass
-            #if not line: break
-            if line in cls.block_start:
-                _flush()
-                cls.prev_state = 'BLOCK'
+
+            if line == '': continue
+            #line = rstrip(line)
+
+            if line in block_start:
+                _flush('BLOCK', line)
                 tolerance = 1
-                cls.appendee.append(line)
-            elif line.startswith('>'):
-                _flush()
-                cls.prev_state = 'QUOTE'
-                cls.appendee.append(line)
             elif line.startswith('From:'):
                 if tolerance == 1:
                     tolerance = 0
                     cls.appendee.append(line)
                     continue
-                _flush()
-                cls.prev_state = 'BLOCK'
-                cls.appendee.append(line)
+                _flush('BLOCK', line)
+            elif line.startswith('>'):
+                _flush('QUOTE', line)
+            elif cls.prev_state == 'QUOTE':
+                _flush('MSG', line)
             else:
                 cls.appendee.append(line)
 
-        _flush()
-
-        #cls.state_results.append(tuple(['PLAINTXT', subpart_states]))
+        _flush('eof','eof')
         cls.state_results.extend(subpart_states)
 
     @classmethod

@@ -9,6 +9,8 @@ structure of container:
 from tools import flatnique, deuniNone, unidecode_date
 from weakref import WeakValueDictionary
 from bisect import insort_right
+from random import seed, random
+from cPickle import dumps
 
 def stripSubject(subj):
     '''strips out all "re:"s and "fwd:"s'''
@@ -62,13 +64,17 @@ class convContainer(dict):
         self.messages = self['messages']
         self.labels = self['labels']
 
+    @property
+    def latest_received(self):
+        return self['messages'][-1][0]
+
     def __repr__(self):
-        ddate = self['messages'][-1]['date']
-        dsender = u','.join([x['sender'].split()[0].strip('"') for x in self['messages'][-3:]])
+        ddate = self['messages'][-1][-1]['date']
+        dsender = u','.join([x[-1]['sender'].split()[0].strip('"') for x in self['messages'][-3:]])
         dcontained = len(self['messages'])
-        dsubject = stripSubject(self['messages'][-1].get(u'subject',u''))
+        dsubject = stripSubject(self['messages'][-1][-1].get(u'subject',u''))
         dlabels = u' '.join(u'+%s' % x for x in self['labels'])
-        dpreview = u' '.join(self['messages'][-1].get(u'content',u'').split())
+        dpreview = u' '.join(self['messages'][-1][-1].get(u'content',u'').splitlines())
         disprender = u"%s\t%s\t%i\t%s %s %s" % \
             (ddate, dsender, dcontained, dsubject, dlabels, dpreview)
         return disprender
@@ -78,6 +84,7 @@ class lazy_thread(object):
         #this is where all the good stuff is stored
         self.threadList = []
         self.thread_dict = WeakValueDictionary()
+        #self.thread_persist = {}
         #self.thread_dict = {}
 
         #because calling a function once is faster
@@ -126,10 +133,6 @@ class lazy_thread(object):
 
     def __x_msgid(self,x):
         return x['msgid']
-
-    def __x_date(self,x):
-        #return x['date']
-        return unidecode_date(x['date'])
 
     def __x_newest_msg_date(self,x):
         #return x['messages'][-1]['date']
@@ -191,7 +194,7 @@ class lazy_thread(object):
         map(do_insort, fun('messages'))
 
     def append(self, data):
-        id = hex(hash(data))
+        id = hex(hash(dumps(data)))
         data['id'] = id
         self.threadList.append(data)
         self.dictify(data)
@@ -204,7 +207,7 @@ class lazy_thread(object):
         _text_prep = [self._msg_prep(msg) for msg in messages]
         [self._thread(msg) for msg in _text_prep]
 
-        self.sort()
+        #self.sort()
         return
 
     def _msg_prep(self, msg):

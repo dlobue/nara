@@ -6,10 +6,9 @@ structure of container:
     { 'msgids': [], 'subjects': [], 'labels': [], 'messages': [] }
 '''
 
-#import tools
-from tools import flatnique, deuniNone, unidecode_date, catapillar, catapillar2
-import time
+from tools import flatnique, deuniNone, unidecode_date
 from weakref import WeakValueDictionary
+from bisect import insort_right
 
 def stripSubject(subj):
     '''strips out all "re:"s and "fwd:"s'''
@@ -28,30 +27,6 @@ def stripSubject(subj):
             #_container.append(subj[:subj.index(u':')])
         else:
             return subj
-
-
-def asciisplitstripSubject(subj):
-    '''alternate method of removing unwanted "re:"s and "fwd:"s'''
-    lower = str.lower
-    strip = str.strip
-    split = str.split
-    startswith = str.startswith
-    subj = str(subj)
-
-    def striplower(l):
-        return strip(lower(l))
-
-    def minifunc(bit):
-        if len(bit) <= 3:
-            b = striplower(bit)
-            if startswith(b, 're') or startswith(b, 'fw'):
-                return
-        return bit
-    #subj = subj.split(':')
-    subj = split(subj, ':')
-    subj = filter(minifunc,subj)
-    #return [minifunc(x) for x in subj if x]
-    return deuniNone(map(strip,subj))
 
 def splitstripSubject(subj):
     '''alternate method of removing unwanted "re:"s and "fwd:"s'''
@@ -161,7 +136,7 @@ class lazy_thread(object):
         return unidecode_date(x['messages'][-1]['date'])
 
     def sort(self):
-        [msgobj['messages'].sort(key=self.__x_date) for msgobj in self.threadList]
+        #[msgobj['messages'].sort(key=self.__x_date) for msgobj in self.threadList]
         self.threadList.sort(key=self.__x_newest_msg_date)
         self.threadList.reverse()
 
@@ -188,8 +163,9 @@ class lazy_thread(object):
                     if self[key] not in self.duplist:
                         self.duplist.append(self[key])
                         self.merge(self[key], msgobj)
-                        self.sumlist.extend([x for x in sum([msgobj['msgids'],msgobj['subjects']],[]) \
-                                            if x not in self.sumlist])
+                        self.sumlist.extend([x for x in \
+                                sum([msgobj['msgids'],msgobj['subjects']],[]) \
+                                if x not in self.sumlist])
                         self.threadList.remove(self[key])
                     self[key] = msgobj
 
@@ -205,12 +181,18 @@ class lazy_thread(object):
         def fun(key):
             return [x for x in found[key] if x not in workobj[key]]
 
+        def do_insort(x):
+            insort_right(workobj['messages'],x)
+
         workobj['msgids'].extend(fun('msgids'))
         workobj['subjects'].extend(fun('subjects'))
         workobj['labels'].extend(fun('labels'))
-        workobj['messages'].extend(fun('messages'))
+        #workobj['messages'].extend(fun('messages'))
+        map(do_insort, fun('messages'))
 
     def append(self, data):
+        id = hex(hash(data))
+        data['id'] = id
         self.threadList.append(data)
         self.dictify(data)
 
@@ -219,13 +201,8 @@ class lazy_thread(object):
         self.dictify(self[key])
 
     def thread(self, messages):
-        #self._text_prep = []
-        #t = time.time()
         _text_prep = [self._msg_prep(msg) for msg in messages]
         [self._thread(msg) for msg in _text_prep]
-        #[self._thread(msg) for msg in self._text_prep]
-        #t = time.time() - t
-        #print 'message threading took %r seconds' % t
 
         self.sort()
         return
@@ -250,21 +227,22 @@ class lazy_thread(object):
 
         #next flattens, unique-ifys, and removes unicode None's
         msg_refs = deuniNone(flatnique(msg_refs))
-        msg_msgid = self.get(msg,u'msgid',u'')
+        msg_msgid = self.get(msg,u'msgid')
         msg_labels = self.get(msg, u'labels', u'')
+        msg_date = unidecode_date(self.get(msg, u'date'))
         #msg_subject = [stripSubject(self.get(msg,u'subject',u''))]
-        #msg_subject = stripSubject(self.get(msg,u'subject',u''))
-        msg_subject = splitstripSubject(self.get(msg,u'subject',u''))
+        msg_subject = stripSubject(self.get(msg,u'subject',u''))
+        #msg_subject = splitstripSubject(self.get(msg,u'subject',u''))
 
         #hate this, but it helps us avoid unnecessary processing
         if msg_labels and msg_labels != u'None':
             msg_labels = deuniNone(self.split(msg_labels))
         else: msg_labels = []
-        #if u':' in msg_subject: msg_subject = splitstripSubject(msg_subject)
-        #else: msg_subject = [msg_subject]
+        if u':' in msg_subject: msg_subject = splitstripSubject(msg_subject)
+        else: msg_subject = [msg_subject]
 
         loop_msgobj=convContainer(msg_refs, msg_subject,
-                                    msg_labels, [msg])
+                                    msg_labels, [(msg_date, msg)])
 
         return loop_msgobj
 
@@ -292,6 +270,7 @@ class lazy_thread(object):
         #a new conversation, the only email in the conversation,
         #or some jackass is using an email client that doesn't
         #follow standards. whichever the case, we do the same thing: append
+        #oh, or we're not being given messages in the order that they were sent
         self.append(msg)
 
     def verify_thread(self):

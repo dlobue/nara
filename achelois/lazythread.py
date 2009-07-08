@@ -3,11 +3,11 @@ I'm not going to bother with jwz's threading algorithem,
 which isn't very pythonic anyway.
 
 structure of container:
-    { 'msgids': [], 'subjects': [], 'messages': [] }
+    { 'msgids': [], 'subjects': [], 'labels': [], 'messages': [] }
 '''
 
 #import tools
-from tools import flatnique, deuniNone, unidecode_date
+from tools import flatnique, deuniNone, unidecode_date, catapillar, catapillar2
 import time
 from weakref import WeakValueDictionary
 
@@ -59,21 +59,20 @@ def splitstripSubject(subj):
     strip = unicode.strip
     split = unicode.split
     startswith = unicode.startswith
-
+    
     def striplower(l):
         return strip(lower(l))
-
-    def minifunc(bit):
+    
+    def filterfunc(bit):
         if len(bit) <= 3:
             b = striplower(bit)
             if startswith(b, 're') or startswith(b, 'fw'):
                 return
         return bit
-    #subj = subj.split(':')
+
     subj = split(subj, u':')
-    subj = filter(minifunc,subj)
-    #return [minifunc(x) for x in subj if x]
-    return deuniNone(map(strip,subj))
+    subj = filter(filterfunc,subj)
+    return map(strip,subj)
 
 class convContainer(dict):
     def __init__(self, msgids, subjects, labels, messages):
@@ -236,7 +235,12 @@ class lazy_thread(object):
 
         __inreplyto = self.get(msg,u'in_reply_to',u'')
         __msgid = self.get(msg,u'msgid')
-        __refs = self.split(self.get(msg,u'references',u''))
+        #__refs = self.split(self.get(msg,u'references',u''))
+        __refs = self.get(msg,u'references',u'')
+
+        if u' ' in __refs: __refs = self.split(__refs)
+        else: __refs = [__refs]
+
         msg_refs = [[__inreplyto],[__msgid],__refs]
 
         '''self.msg_refs = [[self.get(msg,u'in_reply_to',u'')],
@@ -247,24 +251,22 @@ class lazy_thread(object):
         #next flattens, unique-ifys, and removes unicode None's
         msg_refs = deuniNone(flatnique(msg_refs))
         msg_msgid = self.get(msg,u'msgid',u'')
-        #msg_subject = [stripSubject(self.get(msg,u'subject',u''))]
-        msg_subject = stripSubject(self.get(msg,u'subject',u''))
-        #msg_subject = splitstripSubject(self.get(msg,u'subject',u''))
-        #msg_subject = asciisplitstripSubject(self.get(msg,u'subject',u''))
         msg_labels = self.get(msg, u'labels', u'')
+        #msg_subject = [stripSubject(self.get(msg,u'subject',u''))]
+        #msg_subject = stripSubject(self.get(msg,u'subject',u''))
+        msg_subject = splitstripSubject(self.get(msg,u'subject',u''))
 
         #hate this, but it helps us avoid unnecessary processing
         if msg_labels and msg_labels != u'None':
             msg_labels = deuniNone(self.split(msg_labels))
         else: msg_labels = []
-        if u':' in msg_subject: msg_subject = splitstripSubject(msg_subject)
-        else: msg_subject = [msg_subject]
+        #if u':' in msg_subject: msg_subject = splitstripSubject(msg_subject)
+        #else: msg_subject = [msg_subject]
 
         loop_msgobj=convContainer(msg_refs, msg_subject,
                                     msg_labels, [msg])
 
         return loop_msgobj
-        #self._text_prep.append(loop_msgobj)
 
     def _thread(self, msg):
         '''does the actual threading'''

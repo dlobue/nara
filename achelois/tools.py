@@ -26,3 +26,30 @@ def deuniNone(x):
     try: x.remove(u'None')
     except: pass
     return x
+
+def catapillar(x,sep=u' '):
+    index = unicode.index
+    append = list.append
+    r = []
+    while 1:
+        if sep in x:
+            i = index(x, sep)
+            append(r, x[:i])
+            x = x[i:]
+        else: break
+    if r: return r
+    return x
+
+def catapillar2(x,sep=u' '):
+    index = unicode.index
+    append = list.append
+    c = 0
+    r = []
+    while 1:
+        if sep in x[c:]:
+            i = index(x[c:], sep)
+            append(r, x[c:c+i])
+            c += i
+        else: break
+    if r: return r
+    return x

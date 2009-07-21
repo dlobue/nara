@@ -22,8 +22,6 @@ def stripSubject(subj):
         else:
             return subj
 
-class resultContainer(list): pass
-
 class convContainer(dict):
     def __init__(self, msgids, subjects, labels, messages):
         self['msgids'] = msgids
@@ -51,7 +49,7 @@ class convContainer(dict):
 class lazy_thread(object):
     def __init__(self):
         #this is where all the good stuff is stored
-        self.threadList = resultContainer()
+        self.threadList = []
         self.thread_dict = {}
 
         #because calling a function once is faster

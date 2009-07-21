@@ -85,15 +85,11 @@ class conv_repr(dict):
             buffer_manager.set_buffer(__s)
 
     def __repr__(self):
-        #__ddate = self['messages'][-1]['date']
         __ddate = self['messages'][-1][-1]['date']
-        #__dsender = u','.join([x['sender'].split()[0].strip('"') for x in self['messages'][-3:]])
         __dsender = u','.join([x[-1]['sender'].split()[0].strip('"') for x in self['messages'][-3:]])
         __dcontained = len(self['messages'])
-        #__dsubject = lazythread.stripSubject(self['messages'][-1].get(u'subject',u''))
         __dsubject = lazythread.stripSubject(self['messages'][-1][-1].get(u'subject',u''))
         __dlabels = u' '.join(u'+%s' % x for x in self['labels'])
-        #__dpreview = u' '.join(self['messages'][-1].get(u'content',u'').split())
         __dpreview = u' '.join(self['messages'][-1][-1].get(u'content',u'').split())
         __disprender = "%s   %s   %i   %s %s %s" % \
             (__ddate, __dsender, __dcontained, __dsubject, __dlabels, __dpreview)
@@ -481,7 +477,7 @@ class Screen(object):
     def __init__(self):
         #self.tui = tui
         #self.tui.register_palette(self.palette)
-        #self.result_machine = index.result_machine()
+        self.result_machine = index.result_machine()
         self.thread = monkey_thread()
         #self.thread = lazythread.lazy_thread()
 
@@ -526,9 +522,9 @@ class Screen(object):
 
         self.lines = None
         self.lines2 = info_log_list([urwid.Text(('test','hello2'))],500)
-        self.thread.threadList = thread_walker([])
-        #self.threadcursor = cursor_walk(self.thread.threadList)
-        buffer_manager.register_support(self.thread.threadList, thread_index)
+        #self.thread.threadList = thread_walker([])
+        self.threadcursor = cursor_walk(self.thread.threadList)
+        buffer_manager.register_support(self.threadcursor, thread_index)
         buffer_manager.register_support(self.lines2, info_log)
 
         #urwid.register_signal(buffer_manager, ['log'])
@@ -539,7 +535,7 @@ class Screen(object):
         #self.listbox = urwid.ListBox(self.thread.threadList)
         #self.listbox2 = urwid.ListBox(self.lines2)
         self.listbox2 = buffer_manager.get_buffer(self.lines2)
-        self.listbox = buffer_manager.set_buffer(self.thread.threadList)
+        self.listbox = buffer_manager.set_buffer(self.threadcursor)
         buffer_manager.register_noremove(self.listbox)
         buffer_manager.register_noremove(self.listbox2)
 
@@ -547,15 +543,11 @@ class Screen(object):
         self.redisplay()
         #imapthread._thread_init(self.addLine2)
         self.c = 0
-        result_machine = index.result_machine()
-        unsortlist = list(result_machine.search('*', sortkey=u'date', resultlimit=50000000))
-        self.thread.thread(unsortlist)
-        del result_machine, unsortlist
-        #self.unsortlist = list(self.result_machine.search('*', sortkey=u'date', resultlimit=50000000))
+        self.unsortlist = list(self.result_machine.search('*', sortkey=u'date', resultlimit=50000000))
         #self.unsortlist = list(self.unsortlist)
-        #self.unsortlist.reverse()
+        self.unsortlist.reverse()
         #self.thread.thread(self.unsortlist)
-        #self.thread.thread(self.unsortlist[500*self.c:500*(self.c+1)])
+        self.thread.thread(self.unsortlist[500*self.c:500*(self.c+1)])
         self.redisplay()
 
         while 1:
@@ -582,7 +574,6 @@ class Screen(object):
                 elif key == 'B':
                     buffer_manager.set_prev()
                 elif key == 't':
-                    self.addLine2('adding another 500 to index')
                     self.c += 1
                     self.thread.thread(self.unsortlist[500*self.c:500*(self.c+1)])
                 else:

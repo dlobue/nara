@@ -14,6 +14,7 @@ class callback_list(list):
     append = _callback(list.append)
     extend = _callback(list.extend)
     sort = _callback(list.sort)
+    insert = _callback(list.insert)
     __setslice__ = _callback(list.__setslice__)
     __setitem__ = _callback(list.__setitem__)
     

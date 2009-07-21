@@ -4,6 +4,8 @@ import mailbox
 import tools
 from datetime import datetime
 import time
+import lazythread
+import random
 
 import whoosh.index
 from whoosh.fields import ID, TEXT, KEYWORD, STORED, Schema
@@ -16,9 +18,12 @@ from whoosh.searching import Paginator
 from string import punctuation
 from settings import settings
 
-'''
-import simplejson
+try:
+    import simplejson as json
+except:
+    import json
 
+'''
 global settings
 f = open('settings.json', 'r')
 settings = simplejson.loads(f.read())
@@ -45,8 +50,61 @@ schema = Schema(subject=TEXT(stored=True),
                 flags=KEYWORD(stored=True),
                 content=TEXT(stored=True))
 
-class indexer(object):
+thread_schema = Schema(cid=ID(stored=True, unique=True),
+                        msgids=KEYWORD(stored=True),
+                        subjects=KEYWORD(stored=True),
+                        labels=KEYWORD(stored=True),
+                        last_received=ID(stored=True),
+                        messages=STORED,
+                        )
 
+class threadindexer(object):
+    def __init__(self):
+        self.ix = whoosh.index.create_in(settings['threadixmetadir'], schema=schema)
+        self.writer = self.ix.writer(postlimit=256*1024*1024)
+        self.threader = lazythread.lazy_thread()
+
+    def index_threads(self):
+        q = result_machine()
+        r = q.search('*', sortkey=u'date', resultlimit=50000000)
+        self.threader.thread(r)
+        [add_thread(x) for x in self.threader.threadList]
+        self.writer.commit(OPTIMIZE)
+
+    def add_thread(self, msgobj):
+        random.seed(msgobj)
+        cid = random.random()*1000000
+
+        msgids = msgobj.get(u'msgids',[])
+        search_msgids = u' '.join(msgids).translate(badchars)
+        msgids = json.dumps(msgids, ensure_ascii=False)
+
+        labels = msgobj.get(u'labels',[])
+        search_labels = u' '.join(labels)
+        labels = json.dumps(labels, ensure_ascii=False)
+
+        subjects = msgobj.get(u'subjects',[])
+        search_subjects = u' '.join(subjects)
+        subjects = json.dumps(subjects, ensure_ascii=False)
+
+        messages = msgobj.get(u'messages',[])
+        last_received = messages[-1]['date']
+        messages = json.dumps(messages, ensure_ascii=False)
+
+        self.writer.add_document(cid=u'%i' % cid,
+                                msgids=search_msgids,
+                                _stored_msgids=msgids,
+                                labels=search_labels,
+                                _stored_labels=labels,
+                                subjects=search_subjects,
+                                _stored_subjects=subjects,
+                                messages=u'%s' % messages,
+                                last_received=last_received,)
+
+
+
+
+class indexer(object):
     def __init__(self):
         self.ix = whoosh.index.create_in(settings['ixmetadir'], schema=schema)
 
@@ -135,12 +193,12 @@ class result_machine(object):
 
     def search(self, target, sortkey=None, resultlimit=5000):
         if sortkey is None:
-            reverse = False
+            __reverse = False
         else:
-            reverse = True
-        self.query = self.parser.parse(target)
-        self.results = self.searcher.search(self.query, limit=resultlimit, sortedby=sortkey, reverse=reverse)
-        return self.results
+            __reverse = True
+        __query = self.parser.parse(target)
+        __results = self.searcher.search(__query, limit=resultlimit, sortedby=sortkey, reverse=__reverse)
+        return __results
 
     def cacheadder(self, field, entity):
         self.newref = True
@@ -201,12 +259,12 @@ if __name__ == '__main__':
     #a.index_all()
     import lazythread
     msgthread = lazythread.lazy_thread()
-    q = result_machine()
+    r = result_machine()
     #r = q.start(u'*', sortkey=u'date')
     #p = Paginator(r, perpage=40)
     #for y in p.page(1): print y['date'], y['subject']
     t = time.time()
-    r = q.search('*', sortkey=u'date', resultlimit=50000000)
+    r = r.search('*', sortkey=u'date', resultlimit=50000000)
     t  = time.time() - t
     print 'search query took %r seconds' % t
 
@@ -225,19 +283,15 @@ if __name__ == '__main__':
     print 'message "listing" took %r seconds' % t
     t = time.time()
     msgthread.thread(r)
-    print len(msgthread.threadList)
     print 'done threading!'
     t  = time.time() - t
     print 'message threading took %r seconds' % t
+    print len(msgthread.threadList)
     #for y in r: print y
     #import inspect
     #print r
     #print len(r)
-    print msgthread.threadList[0]
-    print msgthread.threadList[-1]
-    while 1:
-        foo = input('what now? ')
-        if 'q' in foo.lower():  break
+    #input('check ram usage')
     #for i in msgthread.threadList: print i
     '''for i in r:
         #print inspect.getmembers(i)

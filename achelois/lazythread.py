@@ -11,16 +11,44 @@ from bisect import insort_right
 
 def stripSubject(subj):
     '''strips out all "re:"s and "fwd:"s'''
-    __lower = unicode.lower
-    __strip = unicode.strip
+    __lower = str.lower
+    __ulower = unicode.lower
+    __strip = str.strip
+    __ustrip = unicode.strip
+    def lower(x):
+        try: return __lower(x)
+        except: return __ulower(x)
+    def strip(x):
+        try: return __strip(x)
+        except: return __ustrip(x)
+
     while 1:
-        l = __lower(subj)
+        l = lower(subj)
         if l.startswith(u're:') or l.startswith(u'fw:'):
-            subj = __strip(subj[3:])
+            subj = strip(subj[3:])
         elif l.startswith(u'fwd:'):
-            subj = __strip(subj[4:])
+            subj = strip(subj[4:])
         else:
             return subj
+
+def xap_container(msg):
+    __msgid = set(msg.get('msgid'))
+    __in_reply = set(msg.get('in_reply_to'))
+    __refs = set(msg.get('references'))
+
+    __msgids = __msgid | __in_reply | __refs
+    try: __msgids.remove('')
+    except KeyError: pass
+    __subjects = set(msg.get('subject',[]))
+    try: __subjects.remove('')
+    except KeyError: pass
+    __labels = set(msg.get('labels',[]))
+    try: __labels.remove('')
+    except KeyError: pass
+
+    return convContainer(__msgids, __subjects, __labels,
+                            [(msg.get('date')[0], msg)])
+
 
 class convContainer(dict):
     def __init__(self, msgids, subjects, labels, messages):
@@ -34,6 +62,13 @@ class convContainer(dict):
         self.subjects = self['subjects']
         self.messages = self['messages']
         self.labels = self['labels']
+
+    @property
+    def last_update(self):
+        return self['messages'][-1][0]
+    @property
+    def id(self):
+        return self['id']
 
     def __repr__(self):
         __ddate = self['messages'][-1][-1]['date']
@@ -99,33 +134,13 @@ class lazy_thread(object):
     def __len__(self):
         return len(self.threadList)
 
-    def __x_msgid(self,x):
-        return x['msgid']
-
-    def __x_date(self,x):
-        #return x['date']
-        return self.unidecode_date(x['date'])
-
     def __x_newest_msg_date(self,x):
-        #return x['messages'][-1]['date']
-        return self.unidecode_date(x['messages'][-1][-1]['date'])
+        #return self.unidecode_date(x['messages'][-1][-1]['date'])
+        return getattr(x, 'last_update')
 
     def sort(self):
-        #[msgobj['messages'].sort(key=self.__x_date) for msgobj in self.threadList]
-        self.threadList.sort(key=self.__x_newest_msg_date)
-        self.threadList.reverse()
-
-    @property
-    def msgid_list(self):
-        return map(self.__x_msgid, self.threadList)
-
-    def by_msgid(self, key):
-        return [msgobj for msgobj in self.thread \
-                    if key in msgobj['msgids']]
-
-    def by_subject(self, key):
-        return [msgobj for msgobj in self.thread \
-                    if key in msgobj['subjects']]
+        self.threadList.sort(key=self.__x_newest_msg_date, reverse=True)
+        #self.threadList.reverse()
 
     def dictify(self, one=False):
         def quack(key, msgobj):
@@ -157,20 +172,10 @@ class lazy_thread(object):
         def do_insort(x):
             insort_right(workobj['messages'],x)
 
-        #workobj['msgids'].extend([x for x in found['msgids'] if x not in workobj['msgids']])
-        #workobj['subjects'].extend([x for x in found['subjects'] if x not in workobj['subjects']])
-        #workobj['labels'].extend([x for x in found['labels'] if x not in workobj['labels']])
-        #workobj['messages'].extend(found['messages'])
-
-        #workobj['msgids'].extend(fun('msgids'))
-        #workobj['subjects'].extend(fun('subjects'))
-        #workobj['labels'].extend(fun('labels'))
-
         workobj['msgids'] |= found['msgids']
         workobj['subjects'] |= found['subjects']
         workobj['labels'] |= found['labels']
 
-        #workobj['messages'].extend(fun('messages'))
         map(do_insort, fun('messages'))
 
     def append(self, data):
@@ -181,9 +186,14 @@ class lazy_thread(object):
         self.merge(msgobj, self[key])
         self.dictify(self[key])
 
-    def thread(self, messages):
-        __text_prep = (self._msg_prep(msg) for msg in messages)
-        [self._thread(msg) for msg in __text_prep]
+    def thread(self, messages, pre_prepped=True):
+        if pre_prepped:
+            #__prep = [xap_container(msg) for msg in messages]
+            #[self._thread(msg) for msg in __prep]
+            [self._thread(xap_container(msg)) for msg in messages]
+        else:
+            __text_prep = (self._msg_prep(msg) for msg in messages)
+            [self._thread(msg) for msg in __text_prep]
 
         self.sort()
         return
@@ -194,28 +204,9 @@ class lazy_thread(object):
         __inreplyto = set([self.get(msg,u'in_reply_to',u'')])
         __msgid = set([self.get(msg,u'msgid')])
         __refs = set(self.split(self.get(msg,u'references',u'')))
-        #__inreplyto = self.get(msg,u'in_reply_to',u'')
-        #__msgid = self.get(msg,u'msgid')
-        #__refs = self.split(self.get(msg,u'references',u''))
-        #__inreplyto = msg.get(u'in_reply_to',u'')
-        #__msgid = msg.get(u'msgid')
-        #__refs = self.split(msg.get(u'references',u''))
-        #__refs = self.get(msg,u'references',u'')
-        #if u' ' in __refs: __refs = self.split(__refs)
-        #else: __refs = [__refs]
 
-        #__msg_refs = [[__inreplyto],[__msgid],__refs]
-
-        '''self.msg_refs = [[self.get(msg,u'in_reply_to',u'')],
-                        [self.get(msg,u'msgid')],
-                        self.split(self.get(msg,u'references',u''))]
-                        '''
-
-        #next flattens, unique-ifys, and removes unicode None's
-        #__msg_refs = deuniNone(flatnique(__msg_refs))
         __msg_refs = self.deuniNone(__inreplyto|__msgid|__refs)
         __msg_subject = set([stripSubject(self.get(msg,u'subject',u''))])
-        #__msg_labels = msg.get( u'labels', u'')
         __msg_date = self.unidecode_date(self.get(msg,u'date'))
         __msg_labels = self.get(msg, u'labels', u'')
 
@@ -226,7 +217,6 @@ class lazy_thread(object):
 
         return convContainer( __msg_refs, __msg_subject,
                                         set(__msg_labels), [(__msg_date, msg)])
-        #return __loop_msgobj
 
     def _thread(self, msg):
         '''does the actual threading'''
@@ -262,3 +252,18 @@ class lazy_thread(object):
                 if found is not conv:
                     import pdb
                     pdb.set_trace()
+
+
+if __name__ == '__main__':
+    import time, xappy
+    msgthread = lazy_thread()
+    xconn = xappy.IndexerConnection('xap.idx')
+    r = (xconn.get_document(x).data for x in xconn.iterids())
+    print 'going for broke - lets thread!'
+    t = time.time()
+    msgthread.thread(r)
+    print 'done threading!'
+    t  = time.time() - t
+    print 'message threading took %r seconds' % t
+    print len(msgthread.threadList)
+    input('check ram usage')

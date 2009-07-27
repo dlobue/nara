@@ -23,7 +23,9 @@ def uniencode_date(x):
 
 def deuniNone(x):
     '''remove unicoded None's if found'''
-    try: x.remove(u'None')
+    try:
+        try: x.remove(u'None')
+        except: x.remove('None')
     except: pass
     return x
 

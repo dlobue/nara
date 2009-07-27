@@ -4,13 +4,17 @@ import urwid.curses_display
 import urwid
 import collections
 import weakref
+from datetime import datetime, timedelta
+from email.utils import getaddresses
+from operator import itemgetter
 
+import xappy
 import lazythread
-import index
+#import index
 from achelois.lib import util
 from buffer import buffer_manager
-from achelois.lib.view_util import callback_list
-from curwalk import cursor_walk
+#from achelois.lib.view_util import callback_list
+#from curwalk import cursor_walk
 #from achelois.lib.view_conversation import read_walker, conversation_cache
 
 from achelois.lib.message_machine import msg_machine
@@ -35,11 +39,19 @@ attr_dict = {
 
 #import imapthread
 
+class id_list(list):
+    def __hash__(self): return id(self)
+    def __getitem__(self, idx):
+        return list.__getitem__(self,idx)[1]
+    def __getslice__(self, beg, end):
+        return map(itemgetter(1), list.__getslice__(self,beg,end))
 
 class conv_repr(dict):
     #{{{
     __metaclass__ = urwid.MetaSignals
     signals = ['keypress']
+
+    #widget = conv_widget('Loading')
 
     def __init__(self, msgids, subjects, labels, messages):
         self.widget = conv_widget('Loading')
@@ -50,7 +62,7 @@ class conv_repr(dict):
         self['labels'] = labels
         #self['messages'] = callback_list(self.update_widget)
         #self['messages'].extend(messages)
-        self['messages'] = messages
+        self['messages'] = id_list(messages)
         
         #becuse attributes are fun
         self.msgids = self['msgids']
@@ -70,10 +82,10 @@ class conv_repr(dict):
 
     @property
     def last_update(self):
-        return self['messages'][-1][0]
+        return self['messages'][-1]['date']
 
     def update_widget(self):
-        self.widget.set_label(self.__repr__())
+        self.widget.set_label(self.idx_repr())
         try: urwid.Signals.emit(screen.thread.threadList, "modified")
         except: pass
 
@@ -84,17 +96,91 @@ class conv_repr(dict):
             buffer_manager.register_support(__s, view_conversation)
             buffer_manager.set_buffer(__s)
 
+    def idx_repr(self):
+        def chk_new(x):
+            if type(x) is tuple: x = x[1]
+            if 'S' in x['flags']: return False
+            return True
+
+        __tot_new = len(filter(chk_new,self.messages))
+        if __tot_new:
+            __tstat = 'new'
+        else:
+            __tstat = 'read'
+
+        __now = datetime.now()
+        __ddate = self['messages'][-1]['date'][0]
+        if __now.date() == __ddate.date():
+            __rep_date = __ddate.strftime('%X')
+        elif __now.year > __ddate.year:
+            __rep_date = __ddate.strftime('%y %b %d')
+        else:
+            __yest = __now - timedelta(days=1)
+            if __yest.date() == __ddate.date():
+                __rep_date = __ddate.strftime('Yest %X')
+            else:
+                __rep_date = __ddate.strftime('%b %d')
+
+        __ddate = ('new index', __rep_date)
+
+        def sender_markup(x):
+            if type(x) is tuple: x = x[1]
+            if 'S' not in x['flags']: __stat = 'new'
+            else: __stat = 'read'
+            __fname = x['sender'][0].split()[0].strip('"')
+            return ('%s index' % __stat, '%s,' % __fname)
+
+        if __tot_new < 3:
+            if __tot_new == 0: __idx = -1
+            __dsender = filter(chk_new, self.messages)
+            __dsender.extend([x for x in self['messages'][-(3 - __tot_new):]])
+            #__dsender = [x for x in self['messages'][-(3 - __tot_new):]]
+        else:
+            __idx = 0
+            __dsender = [x for x in self['messages'] if 'S' not in x[1]['flags']][:3]
+
+        try: __idx
+        except:
+            try: __oldest_new = filter(chk_new, __dsender)[0]
+            except IndexError:
+                screen.tui.stop()
+                print __tot_new
+                print len(filter(chk_new, __dsender))
+                print len(self.messages)
+                import sys
+                sys.exit()
+        else:
+            __oldest_new = __dsender[__idx]
+        if type(__oldest_new) is tuple: __oldest_new = __oldest_new[1]
+        __dsubject = ('%s index' % __tstat, __oldest_new.get('subject','')[0])
+        __dpreview = ('index sample', ' '.join(__oldest_new.get('sample','')[0].split()))
+
+        __dsender = map(sender_markup, __dsender)
+        __send_caboose = __dsender.pop()
+        try: __dsender.append((__send_caboose[0], __send_caboose[1].strip(',')))
+        except:
+            screen.tui.stop()
+            print __dsender
+            import sys
+            sys.exit()
+
+
+        __dcontained = ('%s index' % __tstat, '%i' % len(self['messages']))
+        __dlabels = ('index label', ' '.join('+%s' % x for x in self['labels']))
+
+        return (__ddate, __dsender, __dcontained, __dsubject, __dlabels, __dpreview)
+
     def __repr__(self):
-        #__ddate = self['messages'][-1]['date']
-        __ddate = self['messages'][-1][-1]['date']
-        #__dsender = u','.join([x['sender'].split()[0].strip('"') for x in self['messages'][-3:]])
-        __dsender = u','.join([x[-1]['sender'].split()[0].strip('"') for x in self['messages'][-3:]])
+        __ddate = self['messages'][-1]['date'][0]
+        #__ddate = self['messages'][-1][-1]['date'][0]
+        __dsender = u','.join([x['sender'][0].strip('"') for x in self['messages'][-3:]])
+        #__dsender = u','.join([x[-1]['sender'][0].strip('"') for x in self['messages'][-3:]])
         __dcontained = len(self['messages'])
-        #__dsubject = lazythread.stripSubject(self['messages'][-1].get(u'subject',u''))
-        __dsubject = lazythread.stripSubject(self['messages'][-1][-1].get(u'subject',u''))
+        __dsubject = self['messages'][-1].get(u'subject',u'')
+        #__dsubject = self['messages'][-1][-1].get(u'subject',u'')
         __dlabels = u' '.join(u'+%s' % x for x in self['labels'])
-        #__dpreview = u' '.join(self['messages'][-1].get(u'content',u'').split())
-        __dpreview = u' '.join(self['messages'][-1][-1].get(u'content',u'').split())
+        __dpreview = u' '.join(self['messages'][-1].get(u'content',u'').split())
+        #__dpreview = u' '.join(self['messages'][-1][-1].get(u'content',u'').split())
         __disprender = "%s   %s   %i   %s %s %s" % \
             (__ddate, __dsender, __dcontained, __dsubject, __dlabels, __dpreview)
         return __disprender
@@ -113,14 +199,50 @@ class conv_widget(urwid.WidgetWrap):
 
     def set_label(self, label):
         self.label = label
-        w = urwid.Text( label, wrap='clip' )
+        #w = urwid.Text( label, wrap='clip' )
+        if type(label) is tuple:
+            __ddate = label[0]
+            try: __ddate = urwid.AttrWrap( urwid.Text(__ddate[1], align='right'), __ddate[0], 'focus')
+            except:
+                screen.tui.stop()
+                print __ddate
+                print label
+                import sys
+                sys.exit()
+            __dsender = label[1]
+            __dsender = urwid.AttrWrap( urwid.Text(__dsender, wrap='clip'), 'body', 'focus')
+            #__dsender = urwid.AttrWrap( urwid.Text(__dsender[1], align='left', wrap='clip'), __dsender[0], 'focus')
+            __dcontained = label[2]
+            __dcontained = urwid.AttrWrap( urwid.Text(__dcontained[1], align='center'), __dcontained[0], 'focus')
+            #__dsubject = label[3]
+            #__dsubject = urwid.AttrWrap( urwid.Text(__dsubject[1], wrap='clip'), __dsubject[0], 'focus')
+            #__dlabels = label[4]
+            #__dlabels = urwid.AttrWrap( urwid.Text(__dlabels[1], wrap='clip'), __dlabels[0], 'focus')
+            #__dpreview = label[5]
+            #__dpreview = urwid.AttrWrap( urwid.Text(__dpreview[1], wrap='clip'), __dpreview[0], 'focus')
+            __rest = list(label[3:])
+            if not __rest[-1][1]: del __rest[-1]
+            if not __rest[1][1]: del __rest[1]
+            __rest = urwid.AttrWrap( urwid.Text(__rest, wrap='clip'), 'body', 'focus')
+    
+            #w = urwid.Text(
+
+            w = urwid.Columns([
+                ('fixed', 10, __ddate),
+                ('fixed', 30, __dsender),
+                ('fixed', 5, __dcontained),
+                __rest],
+                #('weight', 1, __dpreview)],
+                dividechars=1, min_width=4)
+    
+            #w = urwid.WidgetWrap(w)
+                #urwid.Text( label[4], wrap='clip' ),
+                #urwid.Text( label[5], wrap='clip' )],
+
+        else:
+            w = urwid.Text(label)
+
         self.w = urwid.AttrWrap( w, 'body', 'focus' )
-        '''self.w-no = urwid.Columns([
-            ('fixed', 1, self.button_left),
-            urwid.Text( label ),
-            ('fixed', 1, self.button_right)],
-            dividechars=1)
-            '''
         self._invalidate()
 
     def get_label(self):
@@ -168,7 +290,7 @@ class message_machine(list):
     #{{{
     def __init__(self, conv, mindex, muuid):
         self.muuid = muuid
-        msg_get = mymail.get(muuid)
+        msg_get = mymail.get(muuid[0])
         processed = msg_machine.process(msg_get)
         self.extend((machined_widget(conv, mindex, idx, data) for idx,data in enumerate(processed)))
         #}}}
@@ -337,7 +459,7 @@ class message_widget(conversation_widget):
     def __init__(self, conv, mindex):
         msg = conv[mindex]
         sender = msg.get('sender','')
-        date = tools.unidecode_date(msg.get('date',''))
+        date = msg.get('date','')
         recipient = msg.get('recipient','')
         cc = msg.get('cc','')
         flags = msg.get('flags','')
@@ -406,8 +528,10 @@ class read_walker(urwid.ListWalker):
     def find_oldest_new(self):
         msgidx, stateidx = self.focus
         while 1:
-            try: widget = conversation_cache.get_part(self.conv, msgidx, None)
-            except: break
+            #try:
+            print self.conv
+            widget = conversation_cache.get_part(self.conv, msgidx, None)
+            #except: break
             if widget.expanded: break
             msgidx += 1
         newfocus = widget.mindex, None
@@ -477,6 +601,11 @@ class Screen(object):
             ('block quote', 'brown', 'black'),
             ('dunno', 'light magenta', 'black'),
             ('html', 'light green', 'black'),
+            ('new index', 'white', 'black'),
+            ('read index', 'light gray', 'black'),
+            ('starred index', 'yellow', 'black'),
+            ('index label', 'brown', 'black'),
+            ('index sample', 'dark cyan', 'black'),
             ]
     def __init__(self):
         #self.tui = tui
@@ -546,11 +675,12 @@ class Screen(object):
 
         self.redisplay()
         #imapthread._thread_init(self.addLine2)
-        self.c = 0
-        result_machine = index.result_machine()
-        unsortlist = list(result_machine.search('*', sortkey=u'date', resultlimit=50000000))
-        self.thread.thread(unsortlist)
-        del result_machine, unsortlist
+        #self.c = 0
+        #result_machine = index.result_machine()
+        #unsortlist = list(result_machine.search('*', sortkey=u'date', resultlimit=50000000))
+        xconn = xappy.IndexerConnection('xap.idx')
+        r = (xconn.get_document(x).data for x in xconn.iterids())
+        self.thread.thread(r)
         #self.unsortlist = list(self.result_machine.search('*', sortkey=u'date', resultlimit=50000000))
         #self.unsortlist = list(self.unsortlist)
         #self.unsortlist.reverse()
@@ -583,8 +713,8 @@ class Screen(object):
                     buffer_manager.set_prev()
                 elif key == 't':
                     self.addLine2('adding another 500 to index')
-                    self.c += 1
-                    self.thread.thread(self.unsortlist[500*self.c:500*(self.c+1)])
+                    #self.c += 1
+                    #self.thread.thread(self.unsortlist[500*self.c:500*(self.c+1)])
                 else:
                     self.frame.keypress(self.size, key)
                     if key == 'x':

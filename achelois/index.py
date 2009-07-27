@@ -1,64 +1,23 @@
-import email
-import os
-import mailbox
-import tools
 from datetime import datetime
-import time
-import lazythread
-import random
+from achelois.offlinemaildir import mail_sources
+import tools
+from email.utils import parsedate, getaddresses
+from email.iterators import typed_subpart_iterator
+from mailbox import Maildir, MaildirMessage
 
-import whoosh.index
-from whoosh.fields import ID, TEXT, KEYWORD, STORED, Schema
-from whoosh.writing import NO_MERGE, OPTIMIZE
+from lazythread import stripSubject
 
-from whoosh import store
-from whoosh.qparser import QueryParser
-from whoosh.searching import Paginator
+import xappy
 
 from string import punctuation
 from settings import settings
 
-try:
-    import simplejson as json
-except:
-    import json
-
-'''
-global settings
-f = open('settings.json', 'r')
-settings = simplejson.loads(f.read())
-f.close()
-'''
-
 global badchars
 badchars = dict(map(lambda x: (ord(x), None), punctuation))
-dispHeight = 30
 
 inuse_message_cache = None
 
-schema = Schema(subject=TEXT(stored=True),
-                recipient=TEXT(stored=True),
-                sender=TEXT(stored=True),
-                cc=TEXT(stored=True),
-                muuid=ID(stored=True, unique=True),
-                msgid=ID(stored=True),
-                in_reply_to=KEYWORD(stored=True),
-                references=KEYWORD(stored=True),
-                date=ID(stored=True),
-                mtime=ID(stored=True),
-                labels=KEYWORD(stored=True),
-                flags=KEYWORD(stored=True),
-                content=TEXT(stored=True))
-
-thread_schema = Schema(cid=ID(stored=True, unique=True),
-                        msgids=KEYWORD(stored=True),
-                        subjects=KEYWORD(stored=True),
-                        labels=KEYWORD(stored=True),
-                        last_received=ID(stored=True),
-                        messages=STORED,
-                        )
-
-class threadindexer(object):
+'''class threadindexer(object):
     def __init__(self):
         self.ix = whoosh.index.create_in(settings['threadixmetadir'], schema=schema)
         self.writer = self.ix.writer(postlimit=256*1024*1024)
@@ -100,59 +59,119 @@ class threadindexer(object):
                                 _stored_subjects=subjects,
                                 messages=u'%s' % messages,
                                 last_received=last_received,)
+                                '''
 
 
 
 
 class indexer(object):
     def __init__(self):
-        self.ix = whoosh.index.create_in(settings['ixmetadir'], schema=schema)
 
-        self.mpath = os.path.join(settings['rdir'], settings['maildirinc'][1])
-        self.maild = mailbox.Maildir(self.mpath, factory=mailbox.MaildirMessage, create=False)
+        #self.mpath = os.path.join(settings['rdir'], settings['maildirinc'][1])
+        #self.maild = mailbox.Maildir(self.mpath, factory=mailbox.MaildirMessage, create=False)
 
-        # whoosh's default of 4 megs of ram is simply not enough 
-        # to index 500 megs of mail. the cache has to be flushed way
-        # way too many times, and as a result slows indexing down immensely.
-        self.writer = self.ix.writer(postlimit=256*1024*1024)
+        self.mail_sources = mail_sources()
+
+        self.stripSubj = stripSubject
+        self.deuniNone = tools.deuniNone
+        self.usplit = unicode.split
+        self.ssplit = str.split
+        self.strip = str.strip
+
+    def split(self, *x):
+        try: return self.ssplit(*x)
+        except: return self.usplit(*x)
+
+    def open_set_act(self):
+        xconn = xappy.IndexerConnection('xap.idx')
+
+        xconn.add_field_action('subject', xappy.FieldActions.INDEX_FREETEXT,
+                                                    language='en', nopos=True)
+        xconn.add_field_action('subject', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('osubject', xappy.FieldActions.INDEX_FREETEXT,
+                                                    language='en', nopos=True)
+        xconn.add_field_action('osubject', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('recipient', xappy.FieldActions.INDEX_FREETEXT,
+                                                    language='en', nopos=True)
+        xconn.add_field_action('recipient', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('sender', xappy.FieldActions.INDEX_FREETEXT,
+                                                    language='en', nopos=True)
+        xconn.add_field_action('sender', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('cc', xappy.FieldActions.INDEX_FREETEXT,
+                                                    language='en', nopos=True)
+        xconn.add_field_action('cc', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('content', xappy.FieldActions.INDEX_FREETEXT,
+                                                    language='en', nopos=True)
+        xconn.add_field_action('sample', xappy.FieldActions.STORE_CONTENT)
+
+        xconn.add_field_action('labels', xappy.FieldActions.INDEX_EXACT)
+        xconn.add_field_action('labels', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('flags', xappy.FieldActions.INDEX_EXACT)
+        xconn.add_field_action('flags', xappy.FieldActions.STORE_CONTENT)
+
+        xconn.add_field_action('muuid', xappy.FieldActions.INDEX_EXACT)
+        xconn.add_field_action('muuid', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('msgid', xappy.FieldActions.INDEX_EXACT)
+        xconn.add_field_action('msgid', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('in_reply_to', xappy.FieldActions.INDEX_EXACT)
+        xconn.add_field_action('in_reply_to', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('references', xappy.FieldActions.INDEX_EXACT)
+        xconn.add_field_action('references', xappy.FieldActions.STORE_CONTENT)
+
+        #xconn.add_field_action('date', xappy.FieldActions.INDEX_EXACT)
+        xconn.add_field_action('date', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('date', xappy.FieldActions.SORTABLE, type='date')
+        #xconn.add_field_action('mtime', xappy.FieldActions.INDEX_EXACT)
+        xconn.add_field_action('mtime', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('mtime', xappy.FieldActions.SORTABLE, type='date')
+
+        self.writer = xconn
+        self.writer.set_max_mem_use(max_mem=256*1024*1024)
+
 
     def index_all(self):
-        self.mtime = u'%s' % datetime.now().isoformat()
+        try: self.writer
+        except: self.open_set_act()
+
+        self.mtime = datetime.now()
+        #self.mtime = u'%s' % datetime.now().isoformat()
 
         print '%s - started indexing' % datetime.now()
-        for mdir in settings['maildirinc']:
-            self.mpath = os.path.join(settings['rdir'], mdir)
-            self.maild = mailbox.Maildir(self.mpath, factory=mailbox.MaildirMessage, create=False)
-            
-            #speeds everything up by reading entire header cache into ram
-            #before searching, rather than doing it one header at a time.
-            self.maild._refresh()
-
-            #for muuid, msg in self.maild.iteritems():
-
-            print "%s - indexing %s" % (datetime.now(), mdir)
-            [self.parse(muuid) for muuid in self.maild.iterkeys()]
+        [self.parse(muuid,msg) for muuid,msg in self.mail_sources.iteritems()]
     
         print "%s - writing out and optimizing index" % datetime.now()
-        self.writer.commit(OPTIMIZE)
+        self.writer.flush()
         print "%s - writing complete" % datetime.now()
+        self.writer.close()
 
-    def parse(self, muuid):
-        msg = self.maild.get_message(muuid)
-        tmp = ' '.join([m.get_payload(decode=True) for m in \
-                email.iterators.typed_subpart_iterator(msg) \
+    def parse(self, muuid, msg=None):
+        if msg: __msg = msg
+        else:
+            __msg = self.mail_sources.get(muuid)
+
+        if not __msg.is_multipart():
+            __content = __msg.get_payload(decode=True)
+        else:
+            __content = ' '.join([m.get_payload(decode=True) for m in \
+                                    typed_subpart_iterator(__msg, 'text', 'plain') \
+                                    if 'filename' not in m.get('Content-Disposition','')])
+
+
+        '''__tmp = ' '.join([m.get_payload(decode=True) for m in \
+                typed_subpart_iterator(__msg) \
                 if 'filename' not in m.get('Content-Disposition','')])
-        clist = filter(lambda x: x, list(set(msg.get_charsets())))
-        ucontent = None
-        if clist == []: clist = ['utf-8']
-        for citem in clist:
+        __clist = filter(lambda x: x, list(set(__msg.get_charsets())))
+        __ucontent = None
+        if __clist == []: __clist = ['utf-8']
+        for __citem in __clist:
             try:
-                ucontent = unicode(tmp, citem)
+                __ucontent = unicode(__tmp, __citem)
                 break
             except: pass
     
-        if ucontent is None:
-            raise TypeError("couldn't encode email body into unicode properly.", clist, msg._headers, tmp, msg.get_charsets(), muuid, self.mpath)
+        if __ucontent is None:
+            raise TypeError("couldn't encode email body into unicode properly.", __clist, __msg._headers, __tmp, __msg.get_charsets(), muuid, self.mpath)
+        '''
         # FIXME: add in more robust error checking on unicode conversion.
         # ex- try guessing what the character that's giving us grief is.
         # fail that, just ignore the strangly encoded char
@@ -161,28 +180,60 @@ class indexer(object):
         # off a faily standard imap server, exchange, and I've not
         # received any emails encoded in anything exotic, like japanese or arabic
     
-        msgid = u'%s' % msg['Message-ID']
-        sent_date = email.utils.parsedate(msg['date'])
-        mflags = u' '.join([u'%s' % x for x in msg.get_flags()])
+        # in case timezone ever becomes an issue...
+        #__sent_date = parsedate_tz(__msg['date'])
+        #__tz = __sent_date[-1]
+        #if __tz is None:
 
-        self.writer.add_document(subject=u'%s' % msg['Subject'],
-                            muuid=unicode(muuid),
-                            msgid=msgid.translate(badchars),
-                            _stored_msgid=msgid,
-                            in_reply_to=u'%s' % msg['In-Reply-To'],
-                            references=u'%s' % msg['References'],
-                            recipient=u'%s' % msg['To'],
-                            sender=u'%s' % msg['From'],
-                            cc=u'%s' % msg['Cc'],
-                            date=tools.uniencode_date(sent_date),
-                            mtime=self.mtime,
-                            labels=u'%s' % msg['Labels'],
-                            flags=mflags,
-                            content=ucontent,
-                            _stored_content=ucontent[:80])
+        __sent_date = datetime(*parsedate(__msg['date'])[:6])
+        #mflags = u' '.join([u'%s' % x for x in msg.get_flags()])
+        #mflags = [u'%s' % x for x in msg.get_flags()]
+        #__subj = self.get(__msg, 'Subject')
+        __subj = __msg['Subject']
+
+        __doc = xappy.UnprocessedDocument()
+        __doc.fields.append(xappy.Field('subject', self.stripSubj(__subj) or ''))
+        __doc.fields.append(xappy.Field('osubject', __subj or ''))
+        __doc.fields.append(xappy.Field('muuid', muuid))
+        __doc.fields.append(xappy.Field('msgid', __msg['Message-ID'] or ''))
+        __doc.fields.append(xappy.Field('in_reply_to', __msg['In-Reply-To'] or ''))
+        __doc.fields.append(xappy.Field('sender', __msg['From'] or ''))
+        __doc.fields.append(xappy.Field('date', __sent_date))
+        __doc.fields.append(xappy.Field('mtime', self.mtime))
+        __doc.fields.append(xappy.Field('content', __content or ''))
+        __doc.fields.append(xappy.Field('sample', __content[:80] or ''))
 
 
-class result_machine(object):
+        def multi_add(field, data=None, split=False, strip=False, spliton=None):
+            if data:    __x = data
+            else:       __x = __msg[field]
+            if __x:
+                if split: __x = self.deuniNone(set(self.split(__x, spliton)))
+                for __i in __x:
+                    if strip: __i = __i.strip()
+                    __doc.fields.append(xappy.Field(field, __i))
+            else:
+                __doc.fields.append(xappy.Field(field, ''))
+
+        __flags = [x for x in __msg.get_flags()]
+
+        multi_add('labels', split=True)
+        multi_add('flags', data=__flags)
+        multi_add('references', split=True)
+        multi_add('recipient', split=True, strip=True, spliton=',')
+        multi_add('cc', split=True, strip=True, spliton=',')
+
+        try: self.writer.add(__doc)
+        except:
+            print __doc
+            self.writer.add(__doc)
+            import traceback
+            import sys
+            print sys.exc_info()
+            sys.exit()
+
+
+'''class result_machine(object):
     def __init__(self, pri_field=u"muuid"):
         self.storage = store.FileStorage(settings['ixmetadir'])
         self.ix = whoosh.index.Index(self.storage)
@@ -251,22 +302,24 @@ class result_machine(object):
             global inuse_message_cache
             inuse_message_cache = self.cache
             return thread
+            '''
 
 
 if __name__ == '__main__':
-    import time
-    #a = indexer()
-    #a.index_all()
-    import lazythread
-    msgthread = lazythread.lazy_thread()
-    r = result_machine()
+    #import time
+    a = indexer()
+    a.index_all()
+    #import lazythread
+    #msgthread = lazythread.lazy_thread()
+    #r = result_machine()
     #r = q.start(u'*', sortkey=u'date')
     #p = Paginator(r, perpage=40)
     #for y in p.page(1): print y['date'], y['subject']
-    t = time.time()
-    r = r.search('*', sortkey=u'date', resultlimit=50000000)
-    t  = time.time() - t
-    print 'search query took %r seconds' % t
+
+    #t = time.time()
+    #r = r.search('*', sortkey=u'date', resultlimit=50000000)
+    #t  = time.time() - t
+    #print 'search query took %r seconds' % t
 
     '''t = time.time()
     j = [jwzthreading.make_message(msg) for msg in m]
@@ -276,17 +329,19 @@ if __name__ == '__main__':
     print len(j)
     '''
 
-    print 'going for broke - lets thread!'
-    t = time.time()
-    r = list(r)
-    t  = time.time() - t
-    print 'message "listing" took %r seconds' % t
-    t = time.time()
-    msgthread.thread(r)
-    print 'done threading!'
-    t  = time.time() - t
-    print 'message threading took %r seconds' % t
-    print len(msgthread.threadList)
+    #xconn = xappy.IndexerConnection('xap.idx')
+    #r = (xconn.get_document(x).data for x in xconn.iterids())
+    #print 'going for broke - lets thread!'
+    #t = time.time()
+    #r = list(r)
+    #t  = time.time() - t
+    #print 'message "listing" took %r seconds' % t
+    #t = time.time()
+    #msgthread.thread(r)
+    #print 'done threading!'
+    #t  = time.time() - t
+    #print 'message threading took %r seconds' % t
+    #print len(msgthread.threadList)
     #for y in r: print y
     #import inspect
     #print r

@@ -3,19 +3,20 @@ from achelois.offlinemaildir import mail_sources
 import tools
 from email.utils import parsedate, getaddresses
 from email.iterators import typed_subpart_iterator
-from mailbox import Maildir, MaildirMessage
+#from mailbox import Maildir, MaildirMessage
 
 from lazythread import stripSubject
 
+from uuid import uuid4
 import xappy
 
-from string import punctuation
-from settings import settings
+#from settings import settings
+#from string import punctuation
 
-global badchars
-badchars = dict(map(lambda x: (ord(x), None), punctuation))
+#global badchars
+#badchars = dict(map(lambda x: (ord(x), None), punctuation))
 
-inuse_message_cache = None
+#inuse_message_cache = None
 
 '''class threadindexer(object):
     def __init__(self):
@@ -125,6 +126,10 @@ class indexer(object):
         xconn.add_field_action('mtime', xappy.FieldActions.STORE_CONTENT)
         xconn.add_field_action('mtime', xappy.FieldActions.SORTABLE, type='date')
 
+        xconn.add_field_action('thread', xappy.FieldActions.INDEX_EXACT)
+        xconn.add_field_action('thread', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('thread', xappy.FieldActions.SORTABLE, type='string')
+
         self.writer = xconn
         self.writer.set_max_mem_use(max_mem=256*1024*1024)
 
@@ -186,9 +191,6 @@ class indexer(object):
         #if __tz is None:
 
         __sent_date = datetime(*parsedate(__msg['date'])[:6])
-        #mflags = u' '.join([u'%s' % x for x in msg.get_flags()])
-        #mflags = [u'%s' % x for x in msg.get_flags()]
-        #__subj = self.get(__msg, 'Subject')
         __subj = __msg['Subject']
 
         __doc = xappy.UnprocessedDocument()
@@ -223,6 +225,9 @@ class indexer(object):
         multi_add('recipient', split=True, strip=True, spliton=',')
         multi_add('cc', split=True, strip=True, spliton=',')
 
+        __doc.fields.append(xappy.Field('thread', ''))
+        __doc.id = muuid
+
         try: self.writer.add(__doc)
         except:
             print __doc
@@ -231,6 +236,47 @@ class indexer(object):
             import sys
             print sys.exc_info()
             sys.exit()
+
+
+class threadIndexer(object):
+    def __init__(self):
+        xconn = xappy.IndexerConnection('xap.idx')
+        xconn.add_field_action('thread', xappy.FieldActions.INDEX_EXACT)
+        xconn.add_field_action('thread', xappy.FieldActions.STORE_CONTENT)
+        xconn.add_field_action('thread', xappy.FieldActions.SORTABLE, type='string')
+        self.writer = xconn
+        self.writer.set_max_mem_use(max_mem=256*1024*1024)
+
+        import lazythread
+        self.thread = lazythread.lazy_thread()
+
+    def test_ids(self):
+        for id in self.writer.iterids():
+            print id
+
+    def start(self):
+        __r = (self.writer.get_document(x).data for x in self.writer.iterids())
+        self.thread.thread(__r)
+
+        for thread in self.thread:
+            threadid = uuid4().hex
+            for msg in thread.messages:
+                try: __id = msg['muuid']
+                except: __id = msg[1]['muuid']
+                if type(__id) is list: __id = __id[0]
+                try: __doc = self.writer.get_document(__id)
+                except KeyError:
+                    print "wtf, couldn't find msg %s... try later" % __id
+                    continue
+                __doc.add_term('thread', threadid)
+                __doc.data['thread'] =  [threadid]
+                #__doc.fields.append(xappy.Field('thread', threadid))
+                __doc.prepare()
+                #print __doc.data
+                self.writer.replace(__doc)
+
+        self.writer.flush()
+        self.writer.close()
 
 
 '''class result_machine(object):
@@ -307,8 +353,11 @@ class indexer(object):
 
 if __name__ == '__main__':
     #import time
-    a = indexer()
-    a.index_all()
+    #a = indexer()
+    #a.index_all()
+    ti = threadIndexer()
+    ti.start()
+    #ti.test_ids()
     #import lazythread
     #msgthread = lazythread.lazy_thread()
     #r = result_machine()

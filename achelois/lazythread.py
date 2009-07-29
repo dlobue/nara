@@ -8,6 +8,13 @@ structure of container:
 
 from tools import deuniNone, unidecode_date
 from bisect import insort_right
+from weakref import WeakValueDictionary
+from uuid import uuid4
+
+from bsddb import dbshelve
+import bsddb
+db = bsddb.db
+
 
 def stripSubject(subj):
     '''strips out all "re:"s and "fwd:"s'''
@@ -50,6 +57,14 @@ def xap_container(msg):
                             [(msg.get('date')[0], msg)])
 
 
+def conv_callback(key, data):
+    return '%s%s' % (data.last_update.isoformat(), data.id)
+    #return uniencode_date(data.last_update)
+
+def conv_btree_cmp(keya, keyb):
+    return cmp(keya, keyb)*-1
+    #return cmp(unidecode_date(keya), unidecode_date(keyb))*-1
+
 class convContainer(dict):
     def __init__(self, msgids, subjects, labels, messages):
         self['msgids'] = msgids
@@ -85,7 +100,18 @@ class lazy_thread(object):
     def __init__(self):
         #this is where all the good stuff is stored
         self.threadList = []
-        self.thread_dict = {}
+        self.thread_dict = WeakValueDictionary()
+#        e = bsddb.db.DBEnv()
+#        e.set_cachesize(0, 20480)
+#        e.set_lk_detect(db.DB_LOCK_DEFAULT)
+#        e.open('/root/.achelois/bsddb', db.DB_PRIVATE | db.DB_CREATE | db.DB_THREAD | db.DB_INIT_LOCK | db.DB_INIT_MPOOL)
+#        self.thread_persist = dbshelve.open('conv_shelve.db', dbenv=e)
+#        #d = db.DB(e)
+#        d = dbshelve.DBShelf(e)
+#        d.db.set_bt_compare(conv_btree_cmp)
+#        d.open('conv_secondary.db', db.DB_BTREE, db.DB_CREATE, 0660)
+#        self.threadList = d
+#        self.thread_persist.associate(d.db, conv_callback, db.DB_CREATE)
 
         #because calling a function once is faster
         #than calling it 9000 times.
@@ -101,6 +127,7 @@ class lazy_thread(object):
     def __getitem__(self, name):
         #this works because all keys are coming from our search results
         #where _everything_ is unicode :)
+        #return self.thread_dict[name]
         try: name.__int__
         except:
             return self.thread_dict[name]
@@ -108,6 +135,7 @@ class lazy_thread(object):
             return self.threadList[name]
     
     def __setitem__(self, name, value):
+        #self.thread_dict[name] = value
         try: name.__int__
         except:
             self.thread_dict[name] = value
@@ -115,6 +143,7 @@ class lazy_thread(object):
             self.threadList[name] = value
 
     def __delitem__(self, name):
+        #del self.thread_dict[name]
         try: name.__int__
         except:
             del self.thread_dict[name]
@@ -155,6 +184,9 @@ class lazy_thread(object):
                                 msgobj['msgids']|msgobj['subjects'] \
                                 if x not in self.sumlist])
                         self.threadList.remove(self[key])
+                        #try: del self.thread_persist[self[key].id]
+                        #except: pass
+                        #del self._fcache[self[key].id]
                     self[key] = msgobj
 
         self.duplist = []
@@ -164,6 +196,7 @@ class lazy_thread(object):
             [quack(x, one) for x in self.sumlist]
             del self.sumlist, self.duplist
         else:
+            #[self.dictify(msgobj) for msgobj in self.thread_persist]
             [self.dictify(msgobj) for msgobj in self.threadList]
 
     def merge(self, found, workobj):
@@ -179,6 +212,8 @@ class lazy_thread(object):
         map(do_insort, fun('messages'))
 
     def append(self, data):
+        #data['id'] = uuid4().hex
+        #self._fcache[data.id] = data
         self.threadList.append(data)
         self.dictify(data)
 
@@ -187,6 +222,7 @@ class lazy_thread(object):
         self.dictify(self[key])
 
     def thread(self, messages, pre_prepped=True):
+        #self._fcache = {}
         if pre_prepped:
             #__prep = [xap_container(msg) for msg in messages]
             #[self._thread(msg) for msg in __prep]
@@ -195,6 +231,10 @@ class lazy_thread(object):
             __text_prep = (self._msg_prep(msg) for msg in messages)
             [self._thread(msg) for msg in __text_prep]
 
+        #[self.thread_persist.put(key,data) for key,data in self._fcache.iteritems()]
+        #if not pre_prepped: del __text_prep
+        #del self._fcache
+        #self.thread_persist.sync()
         self.sort()
         return
 

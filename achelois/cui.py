@@ -2,11 +2,14 @@
 
 import urwid.curses_display
 import urwid
+from urwid import ListWalker
 import collections
 import weakref
 from datetime import datetime, timedelta
 from email.utils import getaddresses
 from operator import itemgetter
+
+from lazythread import convContainer
 
 import xappy
 import lazythread
@@ -46,29 +49,33 @@ class id_list(list):
     def __getslice__(self, beg, end):
         return map(itemgetter(1), list.__getslice__(self,beg,end))
 
-class conv_repr(dict):
+class conv_repr(object):
     #{{{
     __metaclass__ = urwid.MetaSignals
     signals = ['keypress']
 
     #widget = conv_widget('Loading')
 
-    def __init__(self, msgids, subjects, labels, messages):
+    def __init__(self, dataobj):
+    #def __init__(self, msgids, subjects, labels, messages):
         self.widget = conv_widget('Loading')
         urwid.Signals.connect(self.widget, 'keypress', self.load_msg)
 
-        self['msgids'] = msgids
-        self['subjects'] = subjects
-        self['labels'] = labels
+        #self['msgids'] = msgids
+        #self['subjects'] = subjects
+        #self['labels'] = labels
         #self['messages'] = callback_list(self.update_widget)
         #self['messages'].extend(messages)
-        self['messages'] = id_list(messages)
+        #self['messages'] = id_list(messages)
         
         #becuse attributes are fun
-        self.msgids = self['msgids']
-        self.subjects = self['subjects']
-        self.messages = self['messages']
-        self.labels = self['labels']
+        self.dataobj = dataobj
+        self.msgids = dataobj.msgids
+        self.subjects = dataobj.subjects
+        self.messages = id_list(dataobj.messages)
+        self.labels = dataobj.labels
+
+        self.update_widget()
 
         #self.selectable = self.widget.selectable
         #self.render = self.widget.render
@@ -78,16 +85,17 @@ class conv_repr(dict):
 
     @property
     def id(self):
-        return self['id']
+        return self.dataobj.id
 
     @property
     def last_update(self):
-        return self['messages'][-1]['date']
+        return self.messages[-1]['date']
 
     def update_widget(self):
+        #self.widget.set_label(self.__repr__())
         self.widget.set_label(self.idx_repr())
-        try: urwid.Signals.emit(screen.thread.threadList, "modified")
-        except: pass
+        #try: urwid.Signals.emit(screen.thread.threadList, "modified")
+        #except: pass
 
     def load_msg(self):
         __s = self.messages
@@ -109,7 +117,7 @@ class conv_repr(dict):
             __tstat = 'read'
 
         __now = datetime.now()
-        __ddate = self['messages'][-1]['date'][0]
+        __ddate = self.messages[-1]['date'][0]
         if __now.date() == __ddate.date():
             __rep_date = __ddate.strftime('%X')
         elif __now.year > __ddate.year:
@@ -133,11 +141,11 @@ class conv_repr(dict):
         if __tot_new < 3:
             if __tot_new == 0: __idx = -1
             __dsender = filter(chk_new, self.messages)
-            __dsender.extend([x for x in self['messages'][-(3 - __tot_new):]])
+            __dsender.extend([x for x in self.messages[-(3 - __tot_new):]])
             #__dsender = [x for x in self['messages'][-(3 - __tot_new):]]
         else:
             __idx = 0
-            __dsender = [x for x in self['messages'] if 'S' not in x[1]['flags']][:3]
+            __dsender = [x for x in self.messages if 'S' not in x[1]['flags']][:3]
 
         try: __idx
         except:
@@ -165,21 +173,21 @@ class conv_repr(dict):
             sys.exit()
 
 
-        __dcontained = ('%s index' % __tstat, '%i' % len(self['messages']))
-        __dlabels = ('index label', ' '.join('+%s' % x for x in self['labels']))
+        __dcontained = ('%s index' % __tstat, '%i' % len(self.messages))
+        __dlabels = ('index label', ' '.join('+%s' % x for x in self.labels))
 
         return (__ddate, __dsender, __dcontained, __dsubject, __dlabels, __dpreview)
 
     def __repr__(self):
-        __ddate = self['messages'][-1]['date'][0]
+        __ddate = self.messages[-1]['date'][0]
         #__ddate = self['messages'][-1][-1]['date'][0]
-        __dsender = u','.join([x['sender'][0].strip('"') for x in self['messages'][-3:]])
+        __dsender = u','.join([x['sender'][0].strip('"') for x in self.messages[-3:]])
         #__dsender = u','.join([x[-1]['sender'][0].strip('"') for x in self['messages'][-3:]])
-        __dcontained = len(self['messages'])
-        __dsubject = self['messages'][-1].get(u'subject',u'')
+        __dcontained = len(self.messages)
+        __dsubject = self.messages[-1].get(u'subject',u'')
         #__dsubject = self['messages'][-1][-1].get(u'subject',u'')
-        __dlabels = u' '.join(u'+%s' % x for x in self['labels'])
-        __dpreview = u' '.join(self['messages'][-1].get(u'content',u'').split())
+        __dlabels = u' '.join(u'+%s' % x for x in self.labels)
+        __dpreview = u' '.join(self.messages[-1].get(u'content',u'').split())
         #__dpreview = u' '.join(self['messages'][-1][-1].get(u'content',u'').split())
         __disprender = "%s   %s   %i   %s %s %s" % \
             (__ddate, __dsender, __dcontained, __dsubject, __dlabels, __dpreview)
@@ -202,18 +210,12 @@ class conv_widget(urwid.WidgetWrap):
         #w = urwid.Text( label, wrap='clip' )
         if type(label) is tuple:
             __ddate = label[0]
-            try: __ddate = urwid.AttrWrap( urwid.Text(__ddate[1], align='right'), __ddate[0], 'focus')
-            except:
-                screen.tui.stop()
-                print __ddate
-                print label
-                import sys
-                sys.exit()
+            __ddate = urwid.Text(__ddate, align='right')
             __dsender = label[1]
-            __dsender = urwid.AttrWrap( urwid.Text(__dsender, wrap='clip'), 'body', 'focus')
+            __dsender = urwid.Text(__dsender, wrap='clip')
             #__dsender = urwid.AttrWrap( urwid.Text(__dsender[1], align='left', wrap='clip'), __dsender[0], 'focus')
             __dcontained = label[2]
-            __dcontained = urwid.AttrWrap( urwid.Text(__dcontained[1], align='center'), __dcontained[0], 'focus')
+            __dcontained = urwid.Text(__dcontained, align='center')
             #__dsubject = label[3]
             #__dsubject = urwid.AttrWrap( urwid.Text(__dsubject[1], wrap='clip'), __dsubject[0], 'focus')
             #__dlabels = label[4]
@@ -223,26 +225,28 @@ class conv_widget(urwid.WidgetWrap):
             __rest = list(label[3:])
             if not __rest[-1][1]: del __rest[-1]
             if not __rest[1][1]: del __rest[1]
-            __rest = urwid.AttrWrap( urwid.Text(__rest, wrap='clip'), 'body', 'focus')
+            __rest = urwid.Text(__rest, wrap='clip')
     
-            #w = urwid.Text(
 
             w = urwid.Columns([
                 ('fixed', 10, __ddate),
-                ('fixed', 30, __dsender),
+                ('fixed', 25, __dsender),
                 ('fixed', 5, __dcontained),
                 __rest],
-                #('weight', 1, __dpreview)],
                 dividechars=1, min_width=4)
     
+            #__l = list(label)
+            #if not __l[-2][1]: del __l[-2]
+            #if not __l[-1][1]: del __l[-1]
+            #w = urwid.Text(__l, wrap='clip')
             #w = urwid.WidgetWrap(w)
                 #urwid.Text( label[4], wrap='clip' ),
                 #urwid.Text( label[5], wrap='clip' )],
 
         else:
-            w = urwid.Text(label)
+            w = urwid.Text(label, wrap='clip')
 
-        self.w = urwid.AttrWrap( w, 'body', 'focus' )
+        self.w = urwid.AttrWrap( w, 'body', 'index focus' )
         self._invalidate()
 
     def get_label(self):
@@ -254,7 +258,7 @@ class conv_widget(urwid.WidgetWrap):
         urwid.Signals.emit(self, 'keypress')
         #}}}
 
-lazythread.convContainer = conv_repr
+#lazythread.convContainer = conv_repr
 
 class monkey_thread(lazythread.lazy_thread):
     #{{{
@@ -262,28 +266,72 @@ class monkey_thread(lazythread.lazy_thread):
 
     def merge(self, found, workobj):
         self.__super.merge(found, workobj)
-        workobj.update_widget()
+        #workobj.update_widget()
 
     def append(self, data):
         self.__super.append(data)
-        data.update_widget()
+        #data.update_widget()
+        #}}}
+
+class cursor_walk(ListWalker):
+    #{{{
+    def __init__(self, bdb):
+        self.bdb = bdb
+        self.cursor = bdb.cursor()
+        try: self.focus = self.cursor.first()[0]
+        except: self.focus = None
+
+    def __hash__(self): return id(self)
+
+    def _modified(self):
+        ListWalker._modified(self)
+
+    def get_focus(self):
+        if len(self.bdb) == 0: return None, None
+        try: __cur = self.cursor.current()
+        except: __cur = self.cursor.first()
+        return conv_repr(__cur[1]).widget, __cur[0]
+
+    def set_focus(self, position):
+        self.cursor.set(position)
+        self._modified()
+
+    def get_next(self, start_from):
+        __cur = self.cursor.current()
+        if __cur != start_from:
+            self.cursor.set(start_from)
+        try:
+            __ncur = self.cursor.next()
+            return cov_repr(__ncur[1]).widget, __ncur[0]
+        except:
+            return None, None
+
+    def get_prev(self, start_from):
+        __cur = self.cursor.current()
+        if __cur != start_from:
+            self.cursor.set(start_from)
+        try:
+            __ncur = self.cursor.prev()
+            return cov_repr(__ncur[1]).widget, __ncur[0]
+        except:
+            return None, None
         #}}}
 
 class thread_walker(urwid.SimpleListWalker):
     #{{{
     def get_focus(self):
         if len(self) == 0: return None, None
-        return self[self.focus].widget, self.focus
+        return conv_repr(self[self.focus]).widget, self.focus
 
     def get_next(self, start_from):
         pos = start_from + 1
         if len(self) <= pos: return None, None
-        return self[pos].widget, pos
+        return conv_repr(self[pos]).widget, pos
 
     def get_prev(self, start_from):
         pos = start_from - 1
         if pos < 0: return None, None
-        return self[pos].widget, pos
+        return conv_repr(self[pos]).widget, pos
     #}}}
 
 class message_machine(list):
@@ -589,6 +637,7 @@ class Screen(object):
             ('body', 'light gray', 'black'),
             ('selected', 'white', 'black', ('bold')),
             ('focus', 'light blue', 'black', ('bold')),
+            ('index focus', 'black', 'light gray', ('bold')),
             ('selected focus', 'light cyan', 'black', ('bold')),
             ('test', 'yellow', 'dark cyan'),
             ('status', 'white', 'dark blue'),

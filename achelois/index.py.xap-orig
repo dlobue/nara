@@ -3,20 +3,19 @@ from achelois.offlinemaildir import mail_sources
 import tools
 from email.utils import parsedate, getaddresses
 from email.iterators import typed_subpart_iterator
-#from mailbox import Maildir, MaildirMessage
+from mailbox import Maildir, MaildirMessage
 
 from lazythread import stripSubject
 
-from uuid import uuid4
 import xappy
 
-#from settings import settings
-#from string import punctuation
+from string import punctuation
+from settings import settings
 
-#global badchars
-#badchars = dict(map(lambda x: (ord(x), None), punctuation))
+global badchars
+badchars = dict(map(lambda x: (ord(x), None), punctuation))
 
-#inuse_message_cache = None
+inuse_message_cache = None
 
 '''class threadindexer(object):
     def __init__(self):
@@ -126,11 +125,6 @@ class indexer(object):
         xconn.add_field_action('mtime', xappy.FieldActions.STORE_CONTENT)
         xconn.add_field_action('mtime', xappy.FieldActions.SORTABLE, type='date')
 
-        xconn.add_field_action('thread', xappy.FieldActions.INDEX_EXACT)
-        xconn.add_field_action('thread', xappy.FieldActions.STORE_CONTENT)
-        xconn.add_field_action('thread', xappy.FieldActions.COLLAPSE)
-        #xconn.add_field_action('thread', xappy.FieldActions.SORTABLE, type='string')
-
         self.writer = xconn
         self.writer.set_max_mem_use(max_mem=256*1024*1024)
 
@@ -143,12 +137,9 @@ class indexer(object):
         #self.mtime = u'%s' % datetime.now().isoformat()
 
         print '%s - started indexing' % datetime.now()
-        __undocs = [self.parse(muuid,msg) for muuid,msg in self.mail_sources.iteritems()]
-        print "%s - processing" % datetime.now()
-        __pdocs = map(self.writer.process, __undocs)
-        print "%s - writing out index" % datetime.now()
-        map(self.writer.add, __pdocs)
-        print "%s - flushing" % datetime.now()
+        [self.parse(muuid,msg) for muuid,msg in self.mail_sources.iteritems()]
+    
+        print "%s - writing out and optimizing index" % datetime.now()
         self.writer.flush()
         print "%s - writing complete" % datetime.now()
         self.writer.close()
@@ -195,6 +186,9 @@ class indexer(object):
         #if __tz is None:
 
         __sent_date = datetime(*parsedate(__msg['date'])[:6])
+        #mflags = u' '.join([u'%s' % x for x in msg.get_flags()])
+        #mflags = [u'%s' % x for x in msg.get_flags()]
+        #__subj = self.get(__msg, 'Subject')
         __subj = __msg['Subject']
 
         __doc = xappy.UnprocessedDocument()
@@ -229,66 +223,14 @@ class indexer(object):
         multi_add('recipient', split=True, strip=True, spliton=',')
         multi_add('cc', split=True, strip=True, spliton=',')
 
-        __doc.fields.append(xappy.Field('thread', ''))
-        __doc.id = muuid
-
-        return __doc
-        #self.writer.add(__doc)
-
-
-class threadIndexer(object):
-    def __init__(self):
-        xconn = xappy.IndexerConnection('xap.idx')
-        #xconn.add_field_action('thread', xappy.FieldActions.INDEX_EXACT)
-        #xconn.add_field_action('thread', xappy.FieldActions.STORE_CONTENT)
-        #xconn.add_field_action('thread', xappy.FieldActions.COLLAPSE)
-        #xconn.add_field_action('thread', xappy.FieldActions.SORTABLE, type='string')
-        self.writer = xconn
-        self.writer.set_max_mem_use(max_mem=256*1024*1024)
-
-        import lazythread
-        self.thread = lazythread.lazy_thread()
-
-    def test_ids(self):
-        for id in self.writer.iterids():
-            print id
-
-    def start(self):
-        print '%s starting thread indexer' % datetime.now()
-        __r = (self.writer.get_document(x).data for x in self.writer.iterids())
-        print '%s done making generator' % datetime.now()
-        self.thread.thread(__r)
-        print '%s done threading' % datetime.now()
-        __replacements = []
-
-        for thread in self.thread:
-            newid = True
-            try: threadid = thread.threadid
-            except: threadid = uuid4().hex
-            else:
-                if threadid: newid = False
-                else: threadid = uuid4().hex
-
-            for msg in thread.messages:
-                try: __id = msg['muuid']
-                except: __id = msg[1]['muuid']
-                if type(__id) is list: __id = __id[0]
-                try: __doc = self.writer.get_document(__id)
-                except KeyError:
-                    print "wtf, couldn't find msg %s... try later" % __id
-                    continue
-                __doc.add_term('thread', threadid)
-                __doc.add_value('thread', threadid, 'collsort')
-                __doc.data['thread'] =  [threadid]
-                __doc.prepare()
-                __replacements.append(__doc)
-
-
-        print '%s done prepping index update, writing out' % datetime.now()
-        map(self.writer.replace, __replacements)
-        print '%s done updating index on threading' % datetime.now()
-        self.writer.flush()
-        self.writer.close()
+        try: self.writer.add(__doc)
+        except:
+            print __doc
+            self.writer.add(__doc)
+            import traceback
+            import sys
+            print sys.exc_info()
+            sys.exit()
 
 
 '''class result_machine(object):
@@ -359,13 +301,58 @@ class threadIndexer(object):
 
             global inuse_message_cache
             inuse_message_cache = self.cache
-            return thread'''
+            return thread
+            '''
 
 
 if __name__ == '__main__':
     #import time
     a = indexer()
     a.index_all()
-    ti = threadIndexer()
-    ti.start()
-    #ti.test_ids()
+    #import lazythread
+    #msgthread = lazythread.lazy_thread()
+    #r = result_machine()
+    #r = q.start(u'*', sortkey=u'date')
+    #p = Paginator(r, perpage=40)
+    #for y in p.page(1): print y['date'], y['subject']
+
+    #t = time.time()
+    #r = r.search('*', sortkey=u'date', resultlimit=50000000)
+    #t  = time.time() - t
+    #print 'search query took %r seconds' % t
+
+    '''t = time.time()
+    j = [jwzthreading.make_message(msg) for msg in m]
+    j = jwzthreading.thread(j)
+    t  = time.time() - t
+    print 'jwzthreader took %r seconds' % t
+    print len(j)
+    '''
+
+    #xconn = xappy.IndexerConnection('xap.idx')
+    #r = (xconn.get_document(x).data for x in xconn.iterids())
+    #print 'going for broke - lets thread!'
+    #t = time.time()
+    #r = list(r)
+    #t  = time.time() - t
+    #print 'message "listing" took %r seconds' % t
+    #t = time.time()
+    #msgthread.thread(r)
+    #print 'done threading!'
+    #t  = time.time() - t
+    #print 'message threading took %r seconds' % t
+    #print len(msgthread.threadList)
+    #for y in r: print y
+    #import inspect
+    #print r
+    #print len(r)
+    #input('check ram usage')
+    #for i in msgthread.threadList: print i
+    '''for i in r:
+        #print inspect.getmembers(i)
+        print i
+        print '\n\n\n'
+        '''
+    #printSubjects(r)
+    #print r['messages']
+    #print len(r['messages'])

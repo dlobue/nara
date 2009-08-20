@@ -3,6 +3,7 @@
 import urwid.curses_display
 import urwid
 from urwid import ListWalker
+from buffer import buffer_manager
 import collections
 import weakref
 from datetime import datetime, timedelta
@@ -15,7 +16,6 @@ import xappy
 import lazythread
 #import index
 from achelois.lib import util
-from buffer import buffer_manager
 #from achelois.lib.view_util import callback_list
 #from curwalk import cursor_walk
 #from achelois.lib.view_conversation import read_walker, conversation_cache
@@ -23,6 +23,9 @@ from buffer import buffer_manager
 from achelois.lib.message_machine import msg_machine
 from achelois import offlinemaildir
 from achelois import tools
+
+from string import ascii_lowercase, digits, maketrans
+anonitext = maketrans(ascii_lowercase + digits, 'x'*26 + '7'*len(digits))
 
 mymail = offlinemaildir.mail_sources()
 state_dict = {
@@ -181,13 +184,13 @@ class conv_repr(object):
     def __repr__(self):
         __ddate = self.messages[-1]['date'][0]
         #__ddate = self['messages'][-1][-1]['date'][0]
-        __dsender = u','.join([x['sender'][0].strip('"') for x in self.messages[-3:]])
+        __dsender = ','.join([x['sender'][0].strip('"') for x in self.messages[-3:]])
         #__dsender = u','.join([x[-1]['sender'][0].strip('"') for x in self['messages'][-3:]])
         __dcontained = len(self.messages)
         __dsubject = self.messages[-1].get(u'subject',u'')
         #__dsubject = self['messages'][-1][-1].get(u'subject',u'')
-        __dlabels = u' '.join(u'+%s' % x for x in self.labels)
-        __dpreview = u' '.join(self.messages[-1].get(u'content',u'').split())
+        __dlabels = ' '.join(u'+%s' % x for x in self.labels)
+        __dpreview = ' '.join(self.messages[-1].get(u'content',u'').split())
         #__dpreview = u' '.join(self['messages'][-1][-1].get(u'content',u'').split())
         __disprender = "%s   %s   %i   %s %s %s" % \
             (__ddate, __dsender, __dcontained, __dsubject, __dlabels, __dpreview)
@@ -206,9 +209,17 @@ class conv_widget(urwid.WidgetWrap):
         self.set_label( label )
 
     def set_label(self, label):
-        self.label = label
         #w = urwid.Text( label, wrap='clip' )
+        def privatize_txt(x):
+            if type(x) is list:
+                return map(privatize_txt, x)
+            if type(x) is tuple and len(x) == 2:
+                return (x[0], x[1].translate(anonitext))
+
+        self.label = label
         if type(label) is tuple:
+            #label = map(privatize_txt, list(label))
+
             __ddate = label[0]
             __ddate = urwid.Text(__ddate, align='right')
             __dsender = label[1]
@@ -239,13 +250,18 @@ class conv_widget(urwid.WidgetWrap):
             #if not __l[-2][1]: del __l[-2]
             #if not __l[-1][1]: del __l[-1]
             #w = urwid.Text(__l, wrap='clip')
+
             #w = urwid.WidgetWrap(w)
                 #urwid.Text( label[4], wrap='clip' ),
                 #urwid.Text( label[5], wrap='clip' )],
 
         else:
+            #if type(label) is str:
+                #label = label.translate(anonitext)
+            #else: label = str(type(label))
             w = urwid.Text(label, wrap='clip')
 
+        #self.w = urwid.AttrWrap( w, 'body', 'focus' )
         self.w = urwid.AttrWrap( w, 'body', 'index focus' )
         self._invalidate()
 
@@ -727,9 +743,12 @@ class Screen(object):
         #self.c = 0
         #result_machine = index.result_machine()
         #unsortlist = list(result_machine.search('*', sortkey=u'date', resultlimit=50000000))
+
         xconn = xappy.IndexerConnection('xap.idx')
+        #r = [xconn.get_document(x).data for x in xconn.iterids()]
         r = (xconn.get_document(x).data for x in xconn.iterids())
         self.thread.thread(r)
+
         #self.unsortlist = list(self.result_machine.search('*', sortkey=u'date', resultlimit=50000000))
         #self.unsortlist = list(self.unsortlist)
         #self.unsortlist.reverse()

@@ -4,3 +4,4 @@
 *.swp
 xap.idx/*
 achelois/xap.idx/*
+*.cache

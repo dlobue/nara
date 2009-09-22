@@ -335,19 +335,34 @@ class cursor_walk(ListWalker):
 
 class thread_walker(urwid.SimpleListWalker):
     #{{{
+    def __init__(self, contents):
+        self.__super.__init__(contents)
+        self._cache = {}
+
     def get_focus(self):
         if len(self) == 0: return None, None
-        return conv_repr(self[self.focus]).widget, self.focus
+        try: self._cache[self[self.focus]]
+        except KeyError:
+            self._cache[self[self.focus]] = conv_repr(self[self.focus])
+        return self._cache[self[self.focus]].widget, self.focus
 
     def get_next(self, start_from):
         pos = start_from + 1
         if len(self) <= pos: return None, None
-        return conv_repr(self[pos]).widget, pos
+        #return conv_repr(self[pos]).widget, pos
+        try: self._cache[self[pos]]
+        except KeyError:
+            self._cache[self[pos]] = conv_repr(self[pos])
+        return self._cache[self[pos]].widget, pos
 
     def get_prev(self, start_from):
         pos = start_from - 1
         if pos < 0: return None, None
-        return conv_repr(self[pos]).widget, pos
+        #return conv_repr(self[pos]).widget, pos
+        try: self._cache[self[pos]]
+        except KeyError:
+            self._cache[self[pos]] = conv_repr(self[pos])
+        return self._cache[self[pos]].widget, pos
     #}}}
 
 class message_machine(list):

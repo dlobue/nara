@@ -282,27 +282,58 @@ class collapsible(urwid.WidgetWrap):
     def selectable(self):
         return True
 
-class message_widget(object):
-    def __init__(self, opener, msgobj):
-        self.opener = ref(opener)
-        msg_get = mymail.get(msgobj['muuid'][0])
-        processed = msg_machine.process(msg_get)
-        self.header = header_widget(msgobj)
-        self.content = None
-        self.block = None
-        self.quote = None
-        self.html = None
-        self.attachment = None
+class group_state(object):
+    def __init__(self, data):
+        self.expanded = False
+        self.detailed = False
+        self._cache = [data]
+        self.label = urwid.Text('+--(%i) %s' % (len(self._cache), state_dict[self._cache[0][0]]))
 
-        def brita(processed, state):
-            return [machined_widget(self, p) for p in processed if p[0] == state]
-        self.content = brita(processed, 'CONTENT')
-        self.block = brita(processed, 'BLOCKQUOTE')
-        self.html = brita(processed, 'HTML')
-        self.attachment = brita(processed, 'ATTACHMENT')
+    def __getitem__(self, idx):
+        if type(idx) is not int:
+            raise TypeError "Index must be an integer."
+        elif idx == 0:
+            return self.label
+        elif expanded:
+            if idx > 0:
+                return list.__getitem__(self._cache, idx-1)
+            elif idx < 0:
+                return list.__getitem__(self._cache, idx)
+        elif not expanded:
+            if idx == -1:
+                return self.label
+            else:
+                raise IndexError "Invalid index"
 
-        self.expanded = True
-        self.detailed = True
+    def __len__(self):
+        if self.expanded:
+            return list.__len__(self._cache)+1
+        else:
+            return 1
+
+    def append(self, data):
+        list.append(self._cache, data)
+
+class message_widget(group_state):
+    def __init__(self, msgobj):
+        self.expanded = False
+        self.detailed = False
+        self._cache = []
+        __msg_get = mymail.get(msgobj['muuid'][0])
+        __processed = msg_machine.process(__msg_get)
+
+        self.label = header_widget(msgobj)
+        self._state_order = {'CONTENT':0}
+
+        def fadd(p):
+            try: self._cache[self._state_order[p[0]]].append(machined_widget(p))
+            except KeyError:
+                self._state_order[p[0]] = len(self._state_order)
+                return fadd(p)
+            except IndexError: 
+                self._cache[self._state_order[p[0]]] = group_state(machined_widget(p))
+
+        map(fadd, __processed)
 
     @property
     def last(self):
@@ -337,6 +368,46 @@ class read_walker(urwid.ListWalker):
             msgidx += 1
         return self.set_focus((msgidx, 0))
 
+    def get_focus(self):
+        convpos, msgpos, statepos = self.focus
+        w = self._cache[convpos][msgpos][statepos]
+        return w, self.focus
+
+    def set_focus(self, focus):
+        convpos, msgpos, statepos = focus
+        self.focus = convpos, msgpos, statepos
+        self._modified()
+
+    def get_next(self, start_from):
+        convpos, msgpos, statepos = start_from
+        def mdef(convpos, msgpos, statepos):
+            return self._cache[convpos][msgpos][statepos], (convpos, msgpos, statepos)
+        try: return mdef(convpos, msgpos, statepos+1)
+        except IndexError:
+            try: return mdef(convpos, msgpos+1, 0)
+            except IndexError:
+                try: return mdef(convpos+1, 0, 0)
+                except IndexError:
+                    return None, (None, None, None)
+
+    def get_pref(self, start_from):
+        convpos, msgpos, statepos = start_from
+        def mdef(convpos, msgpos, statepos):
+            if msgpos == -1:
+                msgpos = len(self._cache[convpos])-1
+            if statepos == -1:
+                statepos = len(self._cache[convpos][msgpos])-1
+            return self._cache[convpos][msgpos][statepos], (convpos, msgpos, statepos)
+
+        if statepos == 0:
+            if msgpos == 0:
+                if convpos == 0:
+                    return None, (None, None, None)
+                return mdef(convpos-1, -1, -1)
+            return mdef(convpos, msgpos-1, -1)
+        return mdef(convpos, msgpos, statepos-1)
+
+    '''
     def get_focus(self):
         msgidx, stateidx = self.focus
         widget = attrgetter(self._cache[msgidx], self.part_order[stateidx])
@@ -406,4 +477,5 @@ class read_walker(urwid.ListWalker):
                 try: widget = attrgetter(self._cache[msgidx], self.part_order[stateidx])
                 except: msgidx, stateidx, go_last = back_one(msgidx, stateidx)
         return widget, (msgidx, stateidx)
+        '''
     #}}}

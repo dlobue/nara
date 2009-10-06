@@ -87,18 +87,18 @@ class convContainer(dict):
 
     @property
     def last_update(self):
-        return self.messages[-1][0]
+        return self['messages'][-1][0]
     @property
     def id(self):
         return self['id']
 
     def __repr__(self):
-        __ddate = self.messages[-1][-1]['date']
-        __dsender = u','.join([x[-1]['sender'].split()[0].strip('"') for x in self.messages[-3:]])
-        __dcontained = len(self.messages)
-        __dsubject = stripSubject(self.messages[-1][-1].get(u'subject',u''))
-        __dlabels = u' '.join(u'+%s' % x for x in self.labels)
-        __dpreview = u' '.join(self.messages[-1][-1].get(u'content',u'').split())
+        __ddate = self['messages'][-1][-1]['date']
+        __dsender = u','.join([x[-1]['sender'].split()[0].strip('"') for x in self['messages'][-3:]])
+        __dcontained = len(self['messages'])
+        __dsubject = stripSubject(self['messages'][-1][-1].get(u'subject',u''))
+        __dlabels = u' '.join(u'+%s' % x for x in self['labels'])
+        __dpreview = u' '.join(self['messages'][-1][-1].get(u'content',u'').split())
         __disprender = u"%s\t%s\t%i\t%s %s %s" % \
             (__ddate, __dsender, __dcontained, __dsubject, __dlabels, __dpreview)
         return __disprender
@@ -171,7 +171,7 @@ class lazy_thread(object):
         return len(self.threadList)
 
     def __x_newest_msg_date(self,x):
-        #return self.unidecode_date(x.messages[-1][-1]['date'])
+        #return self.unidecode_date(x['messages'][-1][-1]['date'])
         return getattr(x, 'last_update')
 
     def sort(self):
@@ -188,7 +188,7 @@ class lazy_thread(object):
                         self.duplist.append(self[key])
                         self.merge(self[key], msgobj)
                         self.sumlist.extend([x for x in \
-                                msgobj.msgids|msgobj.subjects \
+                                msgobj['msgids']|msgobj['subjects'] \
                                 if x not in self.sumlist])
                         self.threadList.remove(self[key])
                         #try: del self.thread_persist[self[key].id]
@@ -198,8 +198,8 @@ class lazy_thread(object):
 
         self.duplist = []
         if one:
-            #self.sumlist = sum([one.msgids,one.subjects],[])
-            self.sumlist = list(one.msgids|one.subjects)
+            #self.sumlist = sum([one['msgids'],one['subjects']],[])
+            self.sumlist = list(one['msgids']|one['subjects'])
             [quack(x, one) for x in self.sumlist]
             del self.sumlist, self.duplist
         else:
@@ -210,11 +210,11 @@ class lazy_thread(object):
         def fun(key):
             return [__x for __x in found[key] if __x not in workobj[key]]
         def do_insort(x):
-            insort_right(workobj.messages,x)
+            insort_right(workobj['messages'],x)
 
-        workobj.msgids |= found.msgids
-        workobj.subjects |= found.subjects
-        workobj.labels |= found.labels
+        workobj['msgids'] |= found['msgids']
+        workobj['subjects'] |= found['subjects']
+        workobj['labels'] |= found['labels']
 
         map(do_insort, fun('messages'))
 
@@ -294,7 +294,7 @@ class lazy_thread(object):
 
     def verify_thread(self):
         for conv in self.threadList:
-            for uniqident in sum([conv.msgids, conv.subjects],[]):
+            for uniqident in sum([conv['msgids'], conv['subjects']],[]):
                 found = self[uniqident]
                 if found is not conv:
                     import pdb

@@ -1,0 +1,120 @@
+achelois outline:
+
+Questions:
+why/where am i getting stuck?
+how do the widgets interact with one another?
+how does the walker know where to go next?
+how are the widgets layered?
+
+don't forget:
+flat is better than nested
+
+
+
+conv view layout:
+walker: keeps track of position in list, and is local repository for cache
+walker._cache = [ message_widget, message_widget, message_widget ]
+
+message_widget:
+what do I know about the message_widget?
+instantiated with xappy header info
+keeps all widgets for its message cached locally
+takes output from state machine and turns each piece into a machined_widget
+machined widgets are grouped by state: 'headers', 'content', 'blockquote', 'html', 'attachment' ????
+has four "states":
+brief
+detailed
+open
+collapsed
+
+detailed is automatic on on oldest new message
+detailed is only available in open mode.
+
+len(message_widget)
+def __len__(self):
+	return sum([len(x) for x in self._cache])
+
+
+
+state_group_widget: collapsable widget which can show all it contains, or just a summary. (ie- 5 attachments, or one line mentioning five attachments. 25 lines of reply summaries, or one summary of 25 replies)
+state_group_widget.collapse = bool
+
+len(state_group_widget)::
+	def __len__(self):
+		if self.collapse: return 1
+		return list.__len__(self._cache)
+
+
+
+doing things like described above makes collapsing easy. scrolling, not so much.
+for scrolling to work, i need to keep track of my position. i can do this one of several ways:
+
+i can just keep count of my position as an integer based on the sum of all the sublists. this gets hard though when trying to figure out where the fuck i am. it is expensive to calculate, and even more expensive to figure out how to use. (unless i make a mapping!!)
+
+or i can use a tuple to store my position. trivial to implement... think i was working on this last.
+
+
+
+so in walker:
+def get_next(self, curpos):
+	convpos, msgpos, statepos = curpos
+	try: return self._cache[convpos][msgpos][statepos+1]
+	except IndexError:
+		try: return self._cache[convpos][msgpos+1][0]
+		except IndexError:
+			try: return self._cache[convpos+1][0][0]
+			except IndexError: return None
+
+
+def get_prev(self, curpos):
+	convpos, msgpos, statepos = curpos
+	if statepos == 0:
+		if msgpos == 0:
+			if convpos == 0:
+				return None, None, None
+			return convpos-1, -1, -1
+		return convpos, msgpos-1, -1
+	return convpos, msgpos, convpos-1
+	
+
+
+
+
+okay. now, overall structure top to bottom is:
+walker._cache[
+	message_widget._cache[
+		group_state[ machined_widget, machined_widget ],
+		group_state[ machined_widget, machined_widget ],
+		group_state[ machined_widget, machined_widget ]],
+	message_widget._cache[
+		group_state[ machined_widget, machined_widget ],
+		group_state[ machined_widget, machined_widget ],
+		group_state[ machined_widget, machined_widget ]],
+	message_widget._cache[
+		group_state[ machined_widget, machined_widget ],
+		group_state[ machined_widget, machined_widget ],
+		group_state[ machined_widget, machined_widget ]]]
+
+
+solution is in __getitem__
+
+group_state properties:
+collapsed = bool
+detailed = bool
+_cache = list
+label = label widget
+
+def __getitem__(self, idx):
+	if type(idx) is not int:
+		raise TypeError "Index must be an integer."
+	elif idx == 0:
+		return self.label
+	elif idx > 0:
+		return self._cache[idx-1]
+	else:
+		return self._cache[idx]
+
+
+irony: message_widget is an object that is based off the objects that it contains.
+
+base message_widget off group_state and change around its init and update_widget and add 

@@ -1,0 +1,36 @@
+thread walker outline:
+http://mail.python.org/pipermail/python-list/2006-January/360901.html
+
+why am i running into problems?
+
+because more than my code merely working, i want my code to be readable, easy to understand, and easy to update. i want the code to be modular so that obsolete code can be seamlessly replaced.
+
+I also don't want to be wasteful with resources.
+
+where am i stuck specifically?
+
+recombining MVC code in a way that it is still seperate according to MVC, but still interlinked in a fashion where i can modify my data and not have to go hunt down all references to the old data.
+
+
+is my code MVC?
+i think so.
+well, sorta. the lines between MC and VC are blurred. All model code is in index.py.
+actually, it is pretty well seperated (so far). i have two data sources. one i do not control, rather its handled by offlineimap. the other is my database. all of that code is index.py.
+the main portion of my command code is in lazythread.
+i may have done it backwards however - command code is supposed to control everything else, right? so far it seems my command code is used by everything else. :/
+other command code is in tools.py, settings.py, offlinemaildir, message_machine, etc.
+
+view code so far is limited to cui.py.
+i think i may have this one backwards though. my view code controls everything else. :/
+
+
+thinking about it, i don't think i need to be too concerned about the model side of things. comparing my application to a cherrypy or django app, model isn't as essential because there's no data entry. i do not create data with my application. i interact with data i've given.
+
+except for the xapian database.
+model updates the database with new emails found.
+
+
+
+------
+why am i getting confused?
+simplelistwalker or monitored list is based around the idea of events. append data to list (model), automatically update view with new results. very slick, but poor MVC.

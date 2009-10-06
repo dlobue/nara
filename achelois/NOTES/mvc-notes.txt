@@ -1,0 +1,32 @@
+achelois mvc:
+
+
+indexer = model
+view = widgets
+
+libraries (outside of mvc) = lazythreader, tools, utils, state machine, offlinemaildir
+
+command = cui.py
+
+mvc overview: http://mail.python.org/pipermail/python-list/2006-January/360901.html
+
+-MVC is about creating a clear separation of concerns
+-The MVC pattern avoids the latter by disallowing
+circular connections: B can connect to A, but A cannot connect to B. In
+this case, A is the Model and B is the View/Controller.
+-a View/Controller object may, via the Model's
+API, 1. tell the Model to do things (execute commands), and 2. tell the
+Model to give it things (return data)
+-The View/Controller layer
+*pushes instructions* to the Model layer and *pulls information* from
+the Model layer
+
+-But if the Model's state changes, the
+View's copy of that state will no longer be accurate and needs to be
+refreshed.
+-The MVC pattern prevents the Model pushing a fresh copy of
+that information into the View layer.
+
+The answer, you see, is to set up a notifications system, providing the
+Model layer with a place it can announce to no-one in particular that
+it has just done something interesting.

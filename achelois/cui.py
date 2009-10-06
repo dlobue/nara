@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 import urwid.curses_display
 import urwid
@@ -27,7 +28,8 @@ from achelois import tools
 from string import ascii_lowercase, digits, maketrans
 anonitext = maketrans(ascii_lowercase + digits, 'x'*26 + '7'*len(digits))
 
-mymail = offlinemaildir.mail_sources()
+#mymail = offlinemaildir.mail_sources()
+mymail = None
 state_dict = {
             'BLOCK': 'block quote',
             'HTML': 'html-encoded text',
@@ -59,8 +61,9 @@ class conv_repr(object):
 
     #widget = conv_widget('Loading')
 
-    def __init__(self, dataobj):
+    #def __init__(self, dataobj):
     #def __init__(self, msgids, subjects, labels, messages):
+    def __init__(self, msgids, subjects, labels, messages, threadid=None):
         self.widget = conv_widget('Loading')
         urwid.Signals.connect(self.widget, 'keypress', self.load_msg)
 
@@ -72,11 +75,17 @@ class conv_repr(object):
         #self['messages'] = id_list(messages)
         
         #becuse attributes are fun
-        self.dataobj = dataobj
-        self.msgids = dataobj.msgids
-        self.subjects = dataobj.subjects
-        self.messages = id_list(dataobj.messages)
-        self.labels = dataobj.labels
+#        self.dataobj = dataobj
+#        self.msgids = dataobj.msgids
+#        self.subjects = dataobj.subjects
+#        self.messages = id_list(dataobj.messages)
+#        self.labels = dataobj.labels
+
+        self.msgids = msgids
+        self.subjects = subjects
+        self.messages = id_list(messages)
+        self.labels = labels
+        self.threadid = threadid
 
         self.update_widget()
 
@@ -88,7 +97,12 @@ class conv_repr(object):
 
     @property
     def id(self):
-        return self.dataobj.id
+        return self.threadid
+
+    #id = threadid
+
+    def __getitem__(self, key):
+        return getattr(self, key)
 
     @property
     def last_update(self):
@@ -274,7 +288,7 @@ class conv_widget(urwid.WidgetWrap):
         urwid.Signals.emit(self, 'keypress')
         #}}}
 
-#lazythread.convContainer = conv_repr
+lazythread.convContainer = conv_repr
 
 class monkey_thread(lazythread.lazy_thread):
     #{{{
@@ -282,11 +296,11 @@ class monkey_thread(lazythread.lazy_thread):
 
     def merge(self, found, workobj):
         self.__super.merge(found, workobj)
-        #workobj.update_widget()
+        workobj.update_widget()
 
     def append(self, data):
         self.__super.append(data)
-        #data.update_widget()
+        data.update_widget()
         #}}}
 
 class cursor_walk(ListWalker):
@@ -333,36 +347,51 @@ class cursor_walk(ListWalker):
             return None, None
         #}}}
 
+def get_threadids(query='*', field='muuid'):
+    __sconn = xappy.SearchConnection('xap.idx')
+    if query == '*':
+        __q = __sconn.query_all()
+    else:
+        __q = __sconn.query_field(field, query)
+    __r = [a.data['thread'][0] for a in __sconn.search(__q, 0, -1, checkatleast=-1, collapse='thread', sortby='-date')]
+    __sconn.close()
+    return __r
+
 class thread_walker(urwid.SimpleListWalker):
     #{{{
-    def __init__(self, contents):
-        self.__super.__init__(contents)
-        self._cache = {}
+    def __init__(self, threadids):
+        self.threader = lazythread.lazy_thread()
+        self.threadids = threadids              
+        self.count = 0
+
+    def more_threads(self):
+        __c_size = 30 
+
+        __sconn = xappy.SearchConnection('xap.idx')
+        __nq = __sconn.query_composite(sconn.OP_OR,
+                map(lambda x: sconn.query_field('thread', x, sconn.OP_OR),
+                    self.threadids))
+        __r = __sconn.search(__nq, __c_size*self.count, __c_size*(self.count+1), checkatleast=-1, sortby='-date')
+        __sconn.close()
+        if len(__r) < 1: raise IndexError('no more!')
+        self.threader.thread([x.data for x in __r])
+        self.count +=1
 
     def get_focus(self):
-        if len(self) == 0: return None, None
-        try: self._cache[self[self.focus]]
-        except KeyError:
-            self._cache[self[self.focus]] = conv_repr(self[self.focus])
-        return self._cache[self[self.focus]].widget, self.focus
+        if len(self.threader.threadList) == 0: return None, None
+        return self.threader.threadList[self.focus].widget, self.focus
 
     def get_next(self, start_from):
         pos = start_from + 1
-        if len(self) <= pos: return None, None
-        #return conv_repr(self[pos]).widget, pos
-        try: self._cache[self[pos]]
-        except KeyError:
-            self._cache[self[pos]] = conv_repr(self[pos])
-        return self._cache[self[pos]].widget, pos
+        if len(self.threader.threadList) <= pos:
+            try: self.more_threads()
+            except IndexError: return None, None
+        return self.threader.threadList[pos].widget, pos
 
     def get_prev(self, start_from):
         pos = start_from - 1
         if pos < 0: return None, None
-        #return conv_repr(self[pos]).widget, pos
-        try: self._cache[self[pos]]
-        except KeyError:
-            self._cache[self[pos]] = conv_repr(self[pos])
-        return self._cache[self[pos]].widget, pos
+        return self.threader.threadList[pos].widget, pos
     #}}}
 
 class message_machine(list):
@@ -721,7 +750,8 @@ class Screen(object):
         cols, rows = self.size
 
         #self.summarytxt = urwid.Text('inbox, blalkjsdfn %i threads' % len(self.thread), align='left')
-        summarytxt = urwid.Text('inbox, blalkjsdfn number threads', align='left')
+        summarytxt = urwid.Text('inbox, blalkjsdfn %i threads' % len(self.thread), align='left')
+        #summarytxt = urwid.Text('inbox, blalkjsdfn number threads', align='left')
         self.summarytxt = urwid.AttrWrap(summarytxt, 'status')
         self.input = urwid.Edit()
         self.bframe = urwid.Pile([self.summarytxt, self.input])
@@ -737,7 +767,8 @@ class Screen(object):
         self.lines2 = info_log_list([urwid.Text(('test','hello2'))],500)
         self.thread.threadList = thread_walker([])
         #self.threadcursor = cursor_walk(self.thread.threadList)
-        buffer_manager.register_support(self.thread.threadList, thread_index)
+        #buffer_manager.register_support(self.thread.threadList, thread_index)
+        buffer_manager.register_support(thread_walker, thread_index)
         buffer_manager.register_support(self.lines2, info_log)
 
         #urwid.register_signal(buffer_manager, ['log'])
@@ -759,10 +790,17 @@ class Screen(object):
         #result_machine = index.result_machine()
         #unsortlist = list(result_machine.search('*', sortkey=u'date', resultlimit=50000000))
 
-        xconn = xappy.IndexerConnection('xap.idx')
+        #xconn = xappy.IndexerConnection('xap.idx')
         #r = [xconn.get_document(x).data for x in xconn.iterids()]
-        r = (xconn.get_document(x).data for x in xconn.iterids())
-        self.thread.thread(r)
+        #r = [xconn.get_document(x).data for x in xconn.iterids()]
+        #self.thread.thread(r[:500])
+        sconn = xappy.SearchConnection('xap.idx')
+        #r = [a.data['thread'][0] for a in sconn.search(sconn.query_all(), 0, -1, checkatleast=-1, collapse='thread', sortby='-date')]
+        r = [a.data['thread'][0] for a in sconn.search(sconn.query_all(), 0, 99999999, checkatleast=-1, collapse='thread', sortby='-date')]
+        nq = sconn.query_composite(sconn.OP_OR, map(lambda x: sconn.query_field('thread', x, sconn.OP_OR), r))
+        res = sconn.search(nq, 0, 60, checkatleast=-1, sortby='-date')
+        #res = sconn.search(nq, 0, 99999999, checkatleast=-1, sortby='-date')
+        self.thread.thread([x.data for x in res])
 
         #self.unsortlist = list(self.result_machine.search('*', sortkey=u'date', resultlimit=50000000))
         #self.unsortlist = list(self.unsortlist)

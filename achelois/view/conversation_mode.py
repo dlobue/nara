@@ -390,7 +390,7 @@ class read_walker(urwid.ListWalker):
                 except IndexError:
                     return None, (None, None, None)
 
-    def get_pref(self, start_from):
+    def get_prev(self, start_from):
         convpos, msgpos, statepos = start_from
         def mdef(convpos, msgpos, statepos):
             if msgpos == -1:

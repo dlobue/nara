@@ -1,0 +1,36 @@
+def get_threadids(query='*', field='muuid'):
+  __sconn = xappy.SearchConnection('xap.idx')
+  if query == '*':
+    __q = __sconn.query_all()
+  else:
+    __q = __sconn.query_field('content', 'cobbler')
+  __r = [a.data['thread'][0] for a in __sconn.search(__q, 0, -1, checkatleast=-1, collapse='thread', sortby='-date')]
+  __sconn.close()
+  return thread_walker(__r)
+
+
+class thread_walker(ListWalker):
+  def __init__(self, threadids):
+    self.threader = lazythread.lazy_thread()
+    self.threadids = threadids
+    self.count = 0
+   
+  def go_thread(self):
+    __c_size = 30
+    #__threadid_len = len(self.threadids)
+    #if __threadid_len % __c_size: __rem = 1
+    #else: __rem = 0
+    #__rem_tot = __threadid_len/__c_size+__r
+
+    __sconn = xappy.SearchConnection('xap.idx')
+    __nq = __sconn.query_composite(sconn.OP_OR, map(lambda x: sconn.query_field('thread', x, sconn.OP_OR), self.threadids[__c_size*self.count:__c_size*(self.count+1)]))
+    __r = __sconn.search(__nq, 0, -1, checkatleast=-1, sortby='-date')
+    self.threader.thread([x.data for x in __r])
+    self.count +=1
+
+  def get_next(self, start_from):
+    pos = start_from +1
+    if len(self.thread.threadList) <= pos:
+      try: self.go_thread()
+      except: return None, None
+    return self.thread.threadList[pos].widget, pos

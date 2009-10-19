@@ -1,0 +1,46 @@
+function factory that creates msg_container:
+-for messages from maildir, does it do search for relatives immediately?
+...
+fuck no
+
+set thread to ['indexme']
+
+when to thread?
+-when adding one at a time, prior to insertion
+-when adding a bunch at a time, after all are in index
+
+how to combine threads?
+-dictify. thread entire index looking for threads that should be combined.
+-when user tells us
+
+when to combine threads?
+-when user tells us
+-downtime (if i ever figure that the fuck out)
+-after ~20 new single messages are loaded
+-after loading a bunch of new messages into the index
+
+
+
+
+msg_container = namedtuple('msg_container', ['sender', 'to', 'cc', 'subject', 'osubject', 'msgid', 'muuid', 'flags', 'labels', 'sent', 'mtime', 'in_reply_to', 'references', 'sample', 'thread']
+conv_container = namedtuple('conv_container', ['msgids', 'subjects', 'labels', 'thread', 'messages'])
+
+class conv_cont(conv_container):
+	__slots__ = ()
+	last_update = _property(_itemgetter(4)[-1].sent)
+	def merge(self, msg_cntr):
+		tomerge = ('msgids', 'subjects', 'labels')
+		def minsort(x):
+			return [__x for __x in getattr(msg_cntr, x), if __x not in getattr(self, x)]
+		def domerge(x):
+			getattr(self, x).extend(minsort(x))
+		def do_insort(x):
+			insort_right(msg_cntr.messages, x)
+		map(domerge, tomerge)
+		map(do_insort, minsort('messages'))
+
+
+class prop_deque(deque):
+	def __repr__(self):
+		if self.__len__() == 1: return self[0]
+		else: return deque.__repr__(self)

@@ -21,15 +21,11 @@ from achelois.lib import util
 #from curwalk import cursor_walk
 #from achelois.lib.view_conversation import read_walker, conversation_cache
 
-from achelois.lib.message_machine import msg_machine
 from achelois import offlinemaildir
-from achelois import tools
 
 from string import ascii_lowercase, digits, maketrans
 anonitext = maketrans(ascii_lowercase + digits, 'x'*26 + '7'*len(digits))
 
-#mymail = offlinemaildir.mail_sources()
-mymail = None
 state_dict = {
             'BLOCK': 'block quote',
             'HTML': 'html-encoded text',
@@ -55,7 +51,6 @@ class id_list(list):
         return map(itemgetter(1), list.__getslice__(self,beg,end))
 
 class conv_repr(object):
-    #{{{
     __metaclass__ = urwid.MetaSignals
     signals = ['keypress']
 
@@ -209,10 +204,8 @@ class conv_repr(object):
         __disprender = "%s   %s   %i   %s %s %s" % \
             (__ddate, __dsender, __dcontained, __dsubject, __dlabels, __dpreview)
         return __disprender
-    #}}}
 
 class conv_widget(urwid.WidgetWrap):
-    #{{{
     __metaclass__ = urwid.MetaSignals
     signals = ['keypress']
 
@@ -303,77 +296,36 @@ class monkey_thread(lazythread.lazy_thread):
         data.update_widget()
         #}}}
 
-class cursor_walk(ListWalker):
-    #{{{
-    def __init__(self, bdb):
-        self.bdb = bdb
-        self.cursor = bdb.cursor()
-        try: self.focus = self.cursor.first()[0]
-        except: self.focus = None
-
-    def __hash__(self): return id(self)
-
-    def _modified(self):
-        ListWalker._modified(self)
-
-    def get_focus(self):
-        if len(self.bdb) == 0: return None, None
-        try: __cur = self.cursor.current()
-        except: __cur = self.cursor.first()
-        return conv_repr(__cur[1]).widget, __cur[0]
-
-    def set_focus(self, position):
-        self.cursor.set(position)
-        self._modified()
-
-    def get_next(self, start_from):
-        __cur = self.cursor.current()
-        if __cur != start_from:
-            self.cursor.set(start_from)
-        try:
-            __ncur = self.cursor.next()
-            return cov_repr(__ncur[1]).widget, __ncur[0]
-        except:
-            return None, None
-
-    def get_prev(self, start_from):
-        __cur = self.cursor.current()
-        if __cur != start_from:
-            self.cursor.set(start_from)
-        try:
-            __ncur = self.cursor.prev()
-            return cov_repr(__ncur[1]).widget, __ncur[0]
-        except:
-            return None, None
-        #}}}
-
 def get_threadids(query='*', field='muuid'):
     __sconn = xappy.SearchConnection('xap.idx')
     if query == '*':
         __q = __sconn.query_all()
     else:
         __q = __sconn.query_field(field, query)
-    __r = [a.data['thread'][0] for a in __sconn.search(__q, 0, -1, checkatleast=-1, collapse='thread', sortby='-date')]
+    __r = [a.data['thread'][0] for a in __sconn.search(__q, 0, 99999999, checkatleast=-1, collapse='thread', sortby='-date')]
+    #__r = [a.data['thread'][0] for a in __sconn.search(__q, 0, 999999999, checkatleast=-1, collapse='thread', sortby='-date')]
     __sconn.close()
     return __r
 
 class thread_walker(urwid.SimpleListWalker):
-    #{{{
     def __init__(self, threadids):
         self.threader = lazythread.lazy_thread()
         self.threadids = threadids              
         self.count = 0
+        self.focus = 0
+        self.more_threads()
 
     def more_threads(self):
         __c_size = 30 
 
         __sconn = xappy.SearchConnection('xap.idx')
-        __nq = __sconn.query_composite(sconn.OP_OR,
-                map(lambda x: sconn.query_field('thread', x, sconn.OP_OR),
-                    self.threadids))
-        __r = __sconn.search(__nq, __c_size*self.count, __c_size*(self.count+1), checkatleast=-1, sortby='-date')
+        __nq = __sconn.query_composite(__sconn.OP_OR,
+                map(lambda x: __sconn.query_field('thread', x, __sconn.OP_OR),
+                self.threadids))
+        __r = __sconn.search(__nq, 0, 60, checkatleast=-1, sortby='-date')
+        #__r = __sconn.search(__nq, __c_size*self.count, __c_size*(self.count+1), checkatleast=-1, sortby='-date')
         __sconn.close()
-        if len(__r) < 1: raise IndexError('no more!')
+        #if len(__r) < 1: raise IndexError('no more!')
         self.threader.thread([x.data for x in __r])
         self.count +=1
 
@@ -381,298 +333,33 @@ class thread_walker(urwid.SimpleListWalker):
         if len(self.threader.threadList) == 0: return None, None
         return self.threader.threadList[self.focus].widget, self.focus
 
+    def set_focus(self, focus):
+        self.focus = focus
+        self._modified()
+
     def get_next(self, start_from):
         pos = start_from + 1
+        try: return self.threader.threadList[pos].widget, pos
+        except IndexError: return None, None
+
         if len(self.threader.threadList) <= pos:
             try: self.more_threads()
             except IndexError: return None, None
         return self.threader.threadList[pos].widget, pos
 
     def get_prev(self, start_from):
+        if start_from == 0: return None, None
         pos = start_from - 1
-        if pos < 0: return None, None
         return self.threader.threadList[pos].widget, pos
-    #}}}
 
-class message_machine(list):
-    #{{{
-    def __init__(self, conv, mindex, muuid):
-        self.muuid = muuid
-        msg_get = mymail.get(muuid[0])
-        processed = msg_machine.process(msg_get)
-        self.extend((machined_widget(conv, mindex, idx, data) for idx,data in enumerate(processed)))
-        #}}}
-
-class conversation_cache(object):
-    #{{{
-    #__metaclass__ = urwid.MetaSignals
-    #signals = ['log']
-    #_inst_buffers = weakref.WeakKeyDictionary()
-    _inst_buffers = {}
-
-    @classmethod
-    def destroy(cls, conv):
-        del cls._inst_buffers[conv]
-
-    @classmethod
-    def get_conv(cls, conv):
-        try: return cls._inst_buffers[conv]
-        except:
-            cls._inst_buffers.setdefault(conv,{'msgs':conv, 'parts':{}, 'headers':{}})
-            return cls.get_conv(conv)
-
-    @classmethod
-    def get_msg(cls, conv, mindex):
-        try: return cls._inst_buffers[conv]['parts'][mindex]
-        except:
-            muuid = cls.get_conv(conv)['msgs'][mindex]['muuid']
-            cls._inst_buffers[conv]['parts'][mindex] = message_machine(conv, mindex, muuid)
-            return cls.get_msg(conv, mindex)
-
-    @classmethod
-    def get_mindex(cls, conv, mindex):
-        try: return cls._inst_buffers[conv]['msgs'][mindex]
-        except:
-            return cls.get_conv(conv)['msgs'][mindex]
-
-    @classmethod
-    def get_part(cls, conv, mindex, index):
-        if index is None:
-            try: return cls._inst_buffers[conv]['headers'][mindex]
-            except:
-                r = cls.get_mindex(conv, mindex)
-                cls._inst_buffers[conv]['headers'][mindex] = message_widget(conv, mindex)
-                return cls.get_part(conv, mindex, index)
-        try: return cls._inst_buffers[conv]['parts'][mindex][index]
-        except: return cls.get_msg(conv, mindex)[index]
-        #}}}
-
-class conversation_widget(urwid.WidgetWrap):
-    #{{{
-    ''' This widget is not meant for direct use.
-    conv is the conv_repr.messages of the particular conversation
-    mindex is index of the msg we're on in conv
-    index is the position in the results from the state machine
-    display are the contents of the state we're in
-    '''
-
-    __metaclass__ = urwid.MetaSignals
-    signals = ['focus']
-
-    def __init__(self, conv, mindex=0, index=None, attr=None, focus_attr=None):
-        self.conv = conv
-        self.mindex = mindex
-        self.index = index
-
-        #mywalker = buffer_manager.get_buffer(conv)
-        #urwid.Signals.connect(self, 'focus', mywalker.set_focus)
-
-        widget = urwid.Text('Loading')
-        self.widget = widget
-        w = urwid.AttrWrap(widget, attr, focus_attr)
-        self.__super.__init__(w)
-
-    def selectable(self):
-        return True
-
-    def keypress(self, (maxcol,), key):
-        if key in (" ", "enter"):
-            self.expanded = not self.expanded
-            self.update_widget()
-        elif key == 'x':
-            buffer_manager.destroy()
-        #elif key == 'n':
-            #focus = self.find_next_new()
-            #urwid.Signals.emit(self, 'focus', focus)
-            #run find_next_new and send results via signal to walker
-        elif key == 'm':
-            container = conversation_cache.get_part(self.conv, self.mindex, None)
-            container.detail = not container.detail
-            if container.detail: container.expanded = True
-            container.update_widget()
+class thread_index(urwid.ListBox):
+    def __init__(self, body):
+        if type(body) is thread_walker:
+            self.__super.__init__(body)
         else:
-            return key
-
-    def find_next_new(self):
-        msgidx = self.mindex
-        while 1:
-            try: container = conversation_cache.get_part(self.conv, msgidx, None)
-            except: break
-            if container.expanded: break
-            msgidx += 1
-        return container.mindex, None
-
-    def first_part(self):
-        return None
-
-    def last_part(self):
-        return None
-
-    def next_inorder(self):
-        part = self.first_part()
-        if part: return part
-        if self.index is not None:
-            try: return conversation_cache.get_part(self.conv, self.mindex, self.index+1)
-            except IndexError: pass
-        try: return conversation_cache.get_part(self.conv, self.mindex+1, None)
-        except: return None
-
-    def prev_inorder(self):
-        if self.index >= 1:
-            return conversation_cache.get_part(self.conv, self.mindex, self.index-1)
-        elif self.index == 0:
-            return conversation_cache.get_part(self.conv, self.mindex, None)
-        if self.mindex > 0:
-            r = conversation_cache.get_part(self.conv, self.mindex-1, None)
-            part = r.last_part()
-            if part: return part
-            return r
-        return None
-    #}}}
-
-class machined_widget(conversation_widget):
-    #{{{
-    def __init__(self, conv, mindex, index, contents):
-        msg = conv[mindex]
-        state, part = contents
-        self.state = state
-        self.contents = '\n%s' % part
-        if state == 'MSG':
-            container = conversation_cache.get_part(conv, mindex, None)
-            if container.seen: attr = 'read msg'
-            else: attr = 'new msg'
-            self.expanded = True
-        else:
-            self.expanded = False
-            attr = attr_dict[state]
-        self.__super.__init__(conv, mindex, index, attr, 'focus')
-        self.update_widget()
-
-    def update_widget(self):
-        if self.expanded:
-            display = self.contents
-        else:
-            display = '+--- %s, enter or space to expand' % state_dict[self.state]
-        self.widget.set_text(display)
-
-    def keypress(self, (maxcol,), key):
-        if self.state == 'MSG':
-            container = conversation_cache.get_part(self.conv, self.mindex, None)
-            return container.keypress((maxcol,), key)
-        return self.__super.keypress((maxcol,), key)
-    #}}}
-
-class message_widget(conversation_widget):
-    #{{{
-    def __init__(self, conv, mindex):
-        msg = conv[mindex]
-        sender = msg.get('sender','')
-        date = msg.get('date','')
-        recipient = msg.get('recipient','')
-        cc = msg.get('cc','')
-        flags = msg.get('flags','')
-        subject = msg.get('subject','')
-
-        self.headers = u'From: %s\nSent: %s\nTo: %s\nCc: %s\nFlags: %s\nSubject: %s' % \
-                (sender, date, recipient, cc, flags, subject)
-        self.condensed = u"%s %s %s" % \
-                (date, sender, subject)
-
-        self.muuid = msg['muuid']
-
-        if 'S' in flags:
-            self.seen = True
-            colors = 'read headers'
-        else:
-            self.seen = False
-            colors = 'new headers'
-
-        if mindex == 0 and not self.seen:
-            self.detail = True
-        elif conv[mindex] is conv[-1] and self.seen:
-            self.detail = True
-            self.expanded = True
-        else: self.detail = False
-
-        try: self.expanded
-        except: self.expanded = not self.seen
-
-        self.__super.__init__(conv, mindex, None, colors, 'focus headers')
-        self.update_widget()
-
-    def update_widget(self):
-        if self.detail and self.expanded:
-            display = self.headers
-        else:
-            display = self.condensed
-        self.widget.set_text(display)
-    
-    def first_part(self):
-        if not self.expanded:
-            return None
-        return conversation_cache.get_part(self.conv, self.mindex, 0)
-
-    def last_part(self):
-        if not self.expanded:
-            return None
-        return conversation_cache.get_part(self.conv, self.mindex, -1)
-    #}}}
-
-class read_walker(urwid.ListWalker):
-    #{{{
-    def __init__(self, conv):
-        for n in xrange(len(conv)):
-            try:
-                try: trashvar = conversation_cache.get_part(conv, n, 0)
-                except: trashvar = conversation_cache.get_part(conv, n, None)
-            except: pass
-        self.conv = conv
-        self.focus = 0, None
-        self.find_oldest_new()
-
-    def self_destruct(self):
-        conversation_cache.destroy(self.conv)
-
-    def find_oldest_new(self):
-        msgidx, stateidx = self.focus
-        while 1:
-            #try:
-            print self.conv
-            widget = conversation_cache.get_part(self.conv, msgidx, None)
-            #except: break
-            if widget.expanded: break
-            msgidx += 1
-        newfocus = widget.mindex, None
-        return self.set_focus(newfocus)
-
-    def get_focus(self):
-        msgidx, stateidx = self.focus
-        widget = conversation_cache.get_part(self.conv, msgidx, stateidx)
-        return widget, self.focus
-
-    def set_focus(self, focus):
-        msgidx, stateidx = focus
-        self.focus = msgidx, stateidx
-        self._modified()
-
-    def get_next(self, start_from):
-        msgidx, stateidx = start_from
-        widget = conversation_cache.get_part(self.conv, msgidx, stateidx)
-        next_up = widget.next_inorder()
-        if next_up is None:
-            return None, None
-        return next_up, (next_up.mindex, next_up.index)
-
-    def get_prev(self, start_from):
-        msgidx, stateidx = start_from
-        widget = conversation_cache.get_part(self.conv, msgidx, stateidx)
-        prev_up = widget.prev_inorder()
-        if prev_up is None:
-            return None, None
-        return prev_up, (prev_up.mindex, prev_up.index)
-    #}}}
-
-class thread_index(urwid.ListBox): pass
+            __b = thread_walker(get_threadids(body))
+            self.__super.__init__(__b)
+            
 class info_log(urwid.ListBox): pass
 class view_conversation(urwid.ListBox):
     def __init__(self, body):
@@ -680,7 +367,6 @@ class view_conversation(urwid.ListBox):
         self.__super.__init__(read_walker(body))
 
     def self_destruct(self):
-        conversation_cache.destroy(self.conv)
         self._invalidate()
 
 class info_log_list(collections.deque):
@@ -765,10 +451,15 @@ class Screen(object):
 
         self.lines = None
         self.lines2 = info_log_list([urwid.Text(('test','hello2'))],500)
+        '''
         self.thread.threadList = thread_walker([])
+        '''
         #self.threadcursor = cursor_walk(self.thread.threadList)
         #buffer_manager.register_support(self.thread.threadList, thread_index)
+        '''
         buffer_manager.register_support(thread_walker, thread_index)
+        '''
+        buffer_manager.register_support( '*', thread_index)
         buffer_manager.register_support(self.lines2, info_log)
 
         #urwid.register_signal(buffer_manager, ['log'])
@@ -779,9 +470,12 @@ class Screen(object):
         #self.listbox = urwid.ListBox(self.thread.threadList)
         #self.listbox2 = urwid.ListBox(self.lines2)
         self.listbox2 = buffer_manager.get_buffer(self.lines2)
+        self.listbox = buffer_manager.set_buffer('*')
+        '''
         self.listbox = buffer_manager.set_buffer(self.thread.threadList)
-        buffer_manager.register_noremove(self.listbox)
-        buffer_manager.register_noremove(self.listbox2)
+        '''
+        #buffer_manager.register_noremove(self.listbox)
+        #buffer_manager.register_noremove(self.listbox2)
 
 
         self.redisplay()
@@ -794,6 +488,7 @@ class Screen(object):
         #r = [xconn.get_document(x).data for x in xconn.iterids()]
         #r = [xconn.get_document(x).data for x in xconn.iterids()]
         #self.thread.thread(r[:500])
+        '''
         sconn = xappy.SearchConnection('xap.idx')
         #r = [a.data['thread'][0] for a in sconn.search(sconn.query_all(), 0, -1, checkatleast=-1, collapse='thread', sortby='-date')]
         r = [a.data['thread'][0] for a in sconn.search(sconn.query_all(), 0, 99999999, checkatleast=-1, collapse='thread', sortby='-date')]
@@ -801,6 +496,7 @@ class Screen(object):
         res = sconn.search(nq, 0, 60, checkatleast=-1, sortby='-date')
         #res = sconn.search(nq, 0, 99999999, checkatleast=-1, sortby='-date')
         self.thread.thread([x.data for x in res])
+        '''
 
         #self.unsortlist = list(self.result_machine.search('*', sortkey=u'date', resultlimit=50000000))
         #self.unsortlist = list(self.unsortlist)
@@ -838,8 +534,6 @@ class Screen(object):
                     #self.thread.thread(self.unsortlist[500*self.c:500*(self.c+1)])
                 else:
                     self.frame.keypress(self.size, key)
-                    if key == 'x':
-                        self.addLine2(str(conversation_cache._inst_buffers.items()))
 
                 self.redisplay()
 

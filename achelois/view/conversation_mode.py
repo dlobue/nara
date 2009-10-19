@@ -1,32 +1,27 @@
 #!/usr/bin/python
 
+from urwid import ListWalker, MetaSuper, MetaSignals, Signals, Text
 from weakref import ref
-import urwid
-from urwid import ListWalker
-from buffer import buffer_manager
-import collections
-import weakref
-from datetime import datetime, timedelta
-from email.utils import getaddresses
-from operator import itemgetter, attrgetter
-
-from achelois.lib import util
 
 from achelois.lib.message_machine import msg_machine
 from achelois import offlinemaildir
-from achelois import tools
 
-from string import ascii_lowercase, digits, maketrans
-anonitext = maketrans(ascii_lowercase + digits, 'x'*26 + '7'*len(digits))
+#from string import ascii_lowercase, digits, maketrans
+#anonitext = maketrans(ascii_lowercase + digits, 'x'*26 + '7'*len(digits))
+
+class xresult_ref(object):
+    __slots__ = ('_cache',)
+
+    def __init__(self, data):
+        self._cache = ref(data)
+
+    def __getattr__(self, attr):
+        __ret = self._cache()[attr]
+        try: return __ret[0]
+        except: return __ret
 
 mymail = offlinemaildir.mail_sources()
 
-fold_dict = {
-            'empty': None,
-            'detail': True,
-            'expanded': True,
-            'collapse': False
-            }
 state_dict = {
             'BLOCK': 'block quote',
             'HTML': 'html-encoded text',
@@ -34,7 +29,6 @@ state_dict = {
             'DUNNO': 'not sure what block is',
             'ATTACHMENT': 'attached file',
             }
-type_dict = state_dict
 attr_dict = {
             'BLOCK': 'block quote',
             'HTML': 'html',
@@ -42,256 +36,178 @@ attr_dict = {
             'DUNNO': 'dunno',
             'ATTACHMENT': 'attachment',
             }
+fold_guide = {
+        'MSG': (True, True),
+        'BLOCK': (False,),
+        'HTML': (False,),
+        'QUOTE': (False,),
+        'DUNNO': (False,),
+        'ATTACHMENT': (False, False),
+        }
 
+class BindException(Exception): pass
+class MetaSupSig(MetaSuper, MetaSignals): pass
 
-class message_machine(list):
-    #{{{
-    def __init__(self, conv, mindex, muuid):
-        self.muuid = muuid
-        msg_get = mymail.get(muuid[0])
-        processed = msg_machine.process(msg_get)
-        self.extend((machined_widget(conv, mindex, idx, data) for idx,data in enumerate(processed)))
-        #}}}
+class MetaSuperSignals(object):
+    __slots__ = []
+    __metaclass__ = MetaSupSig
+    def _connect(self, signal, child, method):
+        Signals.connect(child, signal, method)
 
-class conversation_cache(object):
-    #{{{
-    #__metaclass__ = urwid.MetaSignals
-    #signals = ['log']
-    #_inst_buffers = weakref.WeakKeyDictionary()
-    _inst_buffers = {}
+    def _emit(self, signal, *args, **kwargs):
+        Signals.emit(self, signal, *args, **kwargs)
 
-    @classmethod
-    def destroy(cls, conv):
-        del cls._inst_buffers[conv]
-
-    @classmethod
-    def get_conv(cls, conv):
-        try: return cls._inst_buffers[conv]
-        except:
-            cls._inst_buffers.setdefault(conv,{'msgs':conv, 'parts':{}, 'headers':{}})
-            return cls.get_conv(conv)
-
-    @classmethod
-    def get_msg(cls, conv, mindex):
-        try: return cls._inst_buffers[conv]['parts'][mindex]
-        except:
-            muuid = cls.get_conv(conv)['msgs'][mindex]['muuid']
-            cls._inst_buffers[conv]['parts'][mindex] = message_machine(conv, mindex, muuid)
-            return cls.get_msg(conv, mindex)
-
-    @classmethod
-    def get_mindex(cls, conv, mindex):
-        try: return cls._inst_buffers[conv]['msgs'][mindex]
-        except:
-            return cls.get_conv(conv)['msgs'][mindex]
-
-    @classmethod
-    def get_part(cls, conv, mindex, index):
-        if index is None:
-            try: return cls._inst_buffers[conv]['headers'][mindex]
-            except:
-                r = cls.get_mindex(conv, mindex)
-                cls._inst_buffers[conv]['headers'][mindex] = message_widget(conv, mindex)
-                return cls.get_part(conv, mindex, index)
-        try: return cls._inst_buffers[conv]['parts'][mindex][index]
-        except: return cls.get_msg(conv, mindex)[index]
-        #}}}
-
-class conversation_widget(urwid.WidgetWrap):
-    #{{{
-    ''' This widget is not meant for direct use.
-    conv is the conv_repr.messages of the particular conversation
-    mindex is index of the msg we're on in conv
-    index is the position in the results from the state machine
-    display are the contents of the state we're in
-    '''
-
-    __metaclass__ = urwid.MetaSignals
-    signals = ['focus']
-
-    def __init__(self, conv, mindex=0, index=None, attr=None, focus_attr=None):
-        self.conv = conv
-        self.mindex = mindex
-        self.index = index
-
-        #mywalker = buffer_manager.get_buffer(conv)
-        #urwid.Signals.connect(self, 'focus', mywalker.set_focus)
-
-        widget = urwid.Text('Loading')
-        self.widget = widget
-        w = urwid.AttrWrap(widget, attr, focus_attr)
-        self.__super.__init__(w)
-
-    def selectable(self):
-        return True
-
+class MetaBind(object):
+    __slots__ = []
     def keypress(self, (maxcol,), key):
-        if key in (" ", "enter"):
-            self.expanded = not self.expanded
-            self.update_widget()
-        elif key == 'x':
-            buffer_manager.destroy()
-        #elif key == 'n':
-            #focus = self.find_next_new()
-            #urwid.Signals.emit(self, 'focus', focus)
-            #run find_next_new and send results via signal to walker
-        elif key == 'm':
-            container = conversation_cache.get_part(self.conv, self.mindex, None)
-            container.detail = not container.detail
-            if container.detail: container.expanded = True
-            container.update_widget()
-        else:
-            return key
+        try:
+            __method = getattr(self, 'do_%s' % kbm[self.context, key])
+            __method((maxcol,),)
+        except AttributeError:
+            self._keybind_failover((maxcol,), key)
 
-    def find_next_new(self):
-        msgidx = self.mindex
-        while 1:
-            try: container = conversation_cache.get_part(self.conv, msgidx, None)
-            except: break
-            if container.expanded: break
-            msgidx += 1
-        return container.mindex, None
+    def _keybind_failover(self, (maxcol,), key):
+        raise BindError("Not set by default! Don't forget to set this method!")
 
-    def first_part(self):
-        return None
+    def do_nomap(self, (maxcol,),):
+        raise AttributeError("Omg! What do I do!?")
 
-    def last_part(self):
-        return None
+class MetaMelt(MetaBind, MetaSuperSignals):
+    __slots__ = []
+    signals = ['keypress', 'modified']
+    def all_connect(self, child):
+        def quack_filter(mthd):
+            if mthd.startswith('_') and mthd.endswith('connect'):
+                return True
+            return False
+        __cntrs = filter(quack_filter, dir(self))
+        [getattr(self, __x)(child) for __x in __cntrs]
 
-    def next_inorder(self):
-        part = self.first_part()
-        if part: return part
-        if self.index is not None:
-            try: return conversation_cache.get_part(self.conv, self.mindex, self.index+1)
-            except IndexError: pass
-        try: return conversation_cache.get_part(self.conv, self.mindex+1, None)
-        except: return None
+    def _kconnect(self, child):
+        self._connect('keypress', child, self.keypress)
+    def _kemit(self, (maxcol,), key):
+        self._emit('keypress', (maxcol,), key)
+    def _keybind_failover(self, (maxcol,), key):
+        self._kemit((maxcol,), key)
 
-    def prev_inorder(self):
-        if self.index >= 1:
-            return conversation_cache.get_part(self.conv, self.mindex, self.index-1)
-        elif self.index == 0:
-            return conversation_cache.get_part(self.conv, self.mindex, None)
-        if self.mindex > 0:
-            r = conversation_cache.get_part(self.conv, self.mindex-1, None)
-            part = r.last_part()
-            if part: return part
-            return r
-        return None
-    #}}}
+    def _mconnect(self, child):
+        self._connect('modified', child, self._modified)
+    def _memit(self):
+        self._emit('modified')
+    def _modified(self):
+        self._memit()
 
-class machined_widget(conversation_widget):
-    #{{{
-    def __init__(self, conv, mindex, index, contents):
-        msg = conv[mindex]
-        state, part = contents
-        self.state = state
-        self.contents = '\n%s' % part
-        if state == 'MSG':
-            container = conversation_cache.get_part(conv, mindex, None)
-            if container.seen: attr = 'read msg'
-            else: attr = 'new msg'
-            self.expanded = True
-        else:
-            self.expanded = False
-            attr = attr_dict[state]
-        self.__super.__init__(conv, mindex, index, attr, 'focus')
-        self.update_widget()
+class text_select_templ(Text, MetaMelt):
+    __slots__ = []
+    _selectable = True
+    ignore_focus = False
+
+class text_select(text_select_templ):
+    __slots__ = []
+    def keypress(self, (maxcol,), key):
+        self._emit('keypress', (maxcol,), key)
+
+class text_select_collapse(text_select_templ):
+    __slots__ = []
+    expanded = False
+    context = 'conversation_view'
+    def __init__(self, __data, align='left', wrap='space', layout=None):
+        __state, __detail = __data
+        self.state = __state
+        self._detail = __detail
+        self.expanded = fold_guide[__state][0] # some widgets should be open by default, others not
+        self.__super.__init__(self.auto_text(), align, wrap, layout)
+
+    def do_toggle(self, (maxcol,),):
+        try: self.expanded = fold_guide[self.state][1] #some widgets should never open, or be closed
+        except IndexError: self.expanded = not self.expanded #the rest can toggle
 
     def update_widget(self):
-        if self.expanded:
-            display = self.contents
-        else:
-            display = '+--- %s, enter or space to expand' % state_dict[self.state]
-        self.widget.set_text(display)
+        self.set_text(self.auto_text())
+        self._modified()
+    def auto_text(self):
+        if self.expanded: return self.detail
+        else: return self.summary
+    @property
+    def detail(self):
+        __r = self._detail
+        return __r
+    @property
+    def summary(self):
+        __r = '+--- %s, enter or space to expand' % state_dict[self.state]
+        return __r
 
-    def keypress(self, (maxcol,), key):
-        if self.state == 'MSG':
-            container = conversation_cache.get_part(self.conv, self.mindex, None)
-            return container.keypress((maxcol,), key)
-        return self.__super.keypress((maxcol,), key)
-    #}}}
+class collapser_label(text_select): pass
 
-class header_widget(conversation_widget):
-    #{{{
-    def __init__(self, conv, mindex):
-        msg = conv[mindex]
-        sender = msg.get('sender','')
-        date = msg.get('date','')
-        recipient = msg.get('recipient','')
-        cc = msg.get('cc','')
-        flags = msg.get('flags','')
-        subject = msg.get('subject','')
+class collapser(MetaMelt):
+    __slots__ = []
+    context = 'conversation_view'
+    expanded = False
+    detailed = False
+    label = collapser_label('Loading')
+    _cache = []
 
-        self.headers = u'From: %s\nSent: %s\nTo: %s\nCc: %s\nFlags: %s\nSubject: %s' % \
-                (sender, date, recipient, cc, flags, subject)
-        self.condensed = u"%s %s %s" % \
-                (date, sender, subject)
-
-        self.muuid = msg['muuid']
-
-        if 'S' in flags:
-            self.seen = True
-            colors = 'read headers'
-        else:
-            self.seen = False
-            colors = 'new headers'
-
-        if mindex == 0 and not self.seen:
-            self.detail = True
-        elif conv[mindex] is conv[-1] and self.seen:
-            self.detail = True
-            self.expanded = True
-        else: self.detail = False
-
-        try: self.expanded
-        except: self.expanded = not self.seen
-
-        self.__super.__init__(conv, mindex, None, colors, 'focus headers')
-        self.update_widget()
-
-    def update_widget(self):
-        if self.detail and self.expanded:
-            display = self.headers
-        else:
-            display = self.condensed
-        self.widget.set_text(display)
-    
-    def first_part(self):
-        if not self.expanded:
-            return None
-        return conversation_cache.get_part(self.conv, self.mindex, 0)
-
-    def last_part(self):
-        if not self.expanded:
-            return None
-        return conversation_cache.get_part(self.conv, self.mindex, -1)
-    #}}}
-
-class collapsible(urwid.WidgetWrap):
-    def __init__(self, contents=[]):
-        self.contents = contents
-        self.state
-        self.type
-        if contents:
-            s = data[0].state
-            l = len(data)
-            w = urwid.Text('+--(%i) %s' % (l, state_dict[s]))
-        else:
-            # FUCK
-    def selectable(self):
-        return True
-
-class group_state(object):
     def __init__(self, data):
-        self.expanded = False
-        self.detailed = False
-        self._cache = [data]
-        self.label = urwid.Text('+--(%i) %s' % (len(self._cache), state_dict[self._cache[0][0]]))
+        self._cache.extend(data)
+        #self.label = collapser_label(self.auto_text())
+        #self.label = Text('+--(%i) %s' % (len(self._cache), state_dict[self._cache[0][0]]))
+
+    def __iter__(self):
+        return self._cache.__iter__()
+
+    def _allconn_4cache(self):
+        """Create signals for all of our children so that
+        they need only emit(self,... and they're speaking
+        directly to their parent"""
+        map(self.all_connect, self._cache)
+
+    def _allconn_4child_cache(self):
+        """Be generous and initiate kconn_cache on all of
+        our children so their children have a direct line
+        to them. If one child doesn't have kconn_cache though,
+        the rest probably don't either."""
+        def quack(__x):
+            __x.allconn_4cache()
+        try: map(quack, self._cache)
+        except AttributeError: pass
+
+    def allconn_4cache(self):
+        self._allconn_4cache()
+        self._allconn_4child_cache()
+
+    def update_widget(self):
+        self.label.set_text(self.auto_text())
+        self._modified()
+
+    def auto_text(self): return 'Placeholder text'
+
+    def _do_set_expanded(self, (maxcol,), status=None): self._change_expanded(status)
+    def _do_toggle_expanded(self, (maxcol,),): self._change_expanded(None)
+    def _do_open_expanded(self, (maxcol,),): self._change_expanded(True)
+    def _do_close_expanded(self, (maxcol,),): self._change_expanded(False)
+
+    def _do_set_detailed(self, (maxcol,), status=None): self._change_detailed(status)
+    def _do_toggle_detailed(self, (maxcol,),): self._change_detailed(None)
+    def _do_open_detailed(self, (maxcol,),): self._change_detailed(True)
+    def _do_close_detailed(self, (maxcol,),): self._change_detailed(False)
+
+    def _change_expanded(self, status=None):
+        if status is None: self.expanded = not self.expanded
+        elif type(status) is bool: self.expanded = status
+        if self.detailed and not self.expanded:
+            self.detailed = False
+        self.update_widget()
+
+    def _change_detailed(self, statue=None):
+        if open is None: self.detailed = not self.detailed
+        elif type(open) is bool: self.detailed = open
+        if self.detailed and not self.expanded:
+            self.expanded = True
+        self.update_widget()
 
     def __getitem__(self, idx):
         if type(idx) is not int:
-            raise TypeError "Index must be an integer."
+            raise TypeError("Index must be an integer.")
         elif idx == 0:
             return self.label
         elif expanded:
@@ -303,7 +219,7 @@ class group_state(object):
             if idx == -1:
                 return self.label
             else:
-                raise IndexError "Invalid index"
+                raise IndexError("Invalid index")
 
     def __len__(self):
         if self.expanded:
@@ -314,15 +230,49 @@ class group_state(object):
     def append(self, data):
         list.append(self._cache, data)
 
-class message_widget(group_state):
+class group_state(collapser):
+    __slots__ = []
+    def auto_text(self):
+        if self.expanded: return self.open
+        else: return self.close
+    @property
+    def open(self):
+        return '[-]---enter or space to close group of %s' % state_dict[self._cache[0].state]
+    @property
+    def close(self):
+        return '[+]---Set of (%i) %s, enter or space to expand' % (len(self._cache), state_dict[self.state])
+
+    do_group_set_expanded = _do_set_expanded
+    do_group_toggle_expanded = _do_toggle_expanded
+    do_group_open_expanded = _do_open_expanded
+    do_group_close_expanded = _do_close_expanded
+
+    do_group_set_detailed = _do_set_detailed
+    do_group_toggle_detailed = _do_toggle_detailed
+    do_group_open_detailed = _do_open_detailed
+    do_group_close_detailed = _do_close_detailed
+
+    '''
+    def do_group_set_expanded(self, (maxcol,), status=None): self._change_expanded(status)
+    def do_group_toggle_expanded(self, (maxcol,),): self._change_expanded(None)
+    def do_group_open_expanded(self, (maxcol,),): self._change_expanded(True)
+    def do_group_close_expanded(self, (maxcol,),): self._change_expanded(False)
+
+    def do_group_set_detailed(self, (maxcol,), status=None): self._change_detailed(status)
+    def do_group_toggle_detailed(self, (maxcol,),): self._change_detailed(None)
+    def do_group_open_detailed(self, (maxcol,),): self._change_detailed(True)
+    def do_group_close_detailed(self, (maxcol,),): self._change_detailed(False)
+    '''
+
+class message_widget(collapser):
+    __slots__ = ['msgobj', '_state_order', ]
     def __init__(self, msgobj):
-        self.expanded = False
-        self.detailed = False
-        self._cache = []
         __msg_get = mymail.get(msgobj['muuid'][0])
         __processed = msg_machine.process(__msg_get)
 
-        self.label = header_widget(msgobj)
+        self.msgobj = msgobj
+        if 'S' in msgobj.get('flags', ''): self.change_expanded(True)
+        #self.label = header_widget(msgobj)
         self._state_order = {'CONTENT':0}
 
         def fadd(p):
@@ -335,43 +285,101 @@ class message_widget(group_state):
 
         map(fadd, __processed)
 
+    def auto_text(self):
+        if self.detailed: return self.detail
+        else: return self.summary
+
+    def _get_details(self, __detlist):
+        def quack(__field):
+            __d = self.msgobj.get(__field, '')
+            try: return __d[0]
+            except: return __d
+        return map(quack, __detlist)
+        
     @property
-    def last(self):
-        if not self.expanded: return self.header
+    def detail(self):
+        __fd = self._get_details(['sender', 'date', 'recipient', 'cc', 'flags', 'subject'])
+        __r = 'From: %s\nSent: %s\nTo: %s\nCc: %s\nFlags: %s\nSubject: %s' % __fd
+                #(__fd[0], __fd[1], __fd[2], __fd[3], __fd[4], __fd[5])
+        return __r
+    @property
+    def summary(self):
+        __fd = self._get_details(['data', 'sender'])
+        __r = u"Sent %s by %s" % __fd
+        #__r = u"Sent %s by %s" % (__fd[0], __fd[1])
+        return __r
 
+    do_msg_set_expanded = _do_set_expanded
+    do_msg_toggle_expanded = _do_toggle_expanded
+    do_msg_open_expanded = _do_open_expanded
+    do_msg_close_expanded = _do_close_expanded
 
-class collapse(list):
-    def __init__(self, msg_level, data=[]):
-        if msg_level == 'message':
-            ##do processing
-        if msg_level == 'state':
-            if data: self.extend(data)
+    do_msg_set_detailed = _do_set_detailed
+    do_msg_toggle_detailed = _do_toggle_detailed
+    do_msg_open_detailed = _do_open_detailed
+    do_msg_close_detailed = _do_close_detailed
 
-class read_walker(urwid.ListWalker):
-    #{{{
-    part_order = ('headers', 'content', 'blockquote', 'html', 'attachment')
+    '''
+    def do_msg_set_expanded(self, (maxcol,), status=None): self._change_expanded(status)
+    def do_msg_toggle_expanded(self, (maxcol,),): self._change_expanded(None)
+    def do_msg_open_expanded(self, (maxcol,),): self._change_expanded(True)
+    def do_msg_close_expanded(self, (maxcol,),): self._change_expanded(False)
+
+    def do_msg_set_detailed(self, (maxcol,), status=None): self._change_detailed(status)
+    def do_msg_toggle_detailed(self, (maxcol,),): self._change_detailed(None)
+    def do_msg_open_detailed(self, (maxcol,),): self._change_detailed(True)
+    def do_msg_close_detailed(self, (maxcol,),): self._change_detailed(False)
+    '''
+
+class read_walker(ListWalker, MetaMelt):
+    __slots__ = ['_cache', 'focus']
     def __init__(self, convobj):
-        self.order = []
+        def quack(__x):
+            __x.allconn_4cache()
+
         self._cache = map(message_widget, convobj.messages)
+        map(quack, self._cache)
         self.focus = 0, 0, 0
-    '''def __init__(self, conv):
-        self.find_oldest_new()'''
+        self.find_oldest_new()
 
     def find_oldest_new(self):
-        msgidx, stateidx = self.focus
-        while 1:
-            #try:
-            widget = attrgetter(self._cache[msgidx], self.part_order[0])
-            #except: break
-            if widget.expanded: break
-            if msgidx == len(self._cache)-1: break
-            msgidx += 1
-        return self.set_focus((msgidx, 0))
+        return self.find_next_new(start_from=(0,0,0))
+        
+    def find_next_new(self, start_from=None):
+        if start_from: convpos, msgpos, statepos = start_from
+        else: convpos, msgpos, statepos = self.focus
+        if convpos > 0: convpos += 1
+        for __w in self._cache[convpos:]:
+            if __w.expanded: break
+        __w.change_detailed(True)
+        convpos = self._cache.index(__w)
+        return self.set_focus((convpos, 0, 0))
+
+    def get_next_msg(self):
+        convpos, msgpos, statepos = self.focus
+        convpos, msgpos, statepos = convpos+1, 0, 0
+        try: return self._cache[convpos][msgpos][statepos], (convpos, msgpos, statepos)
+        except IndexError: return None, (None, None, None)
+
+    def get_prev_msg(self):
+        convpos, msgpos, statepos = self.focus
+        convpos, msgpos, statepos = convpos-1, 0, 0
+        try: return self._cache[convpos][msgpos][statepos], (convpos, msgpos, statepos)
+        except IndexError: return None, (None, None, None)
+
+    def do_find_oldest_new(self, *args, **kwargs):
+        self.find_oldest_new(self, *args, **kwargs)
+    def do_find_next_new(self, *args, **kwargs):
+        self.find_next_new(self, *args, **kwargs)
+    def do_get_next_msg(self, *args, **kwargs):
+        self.get_next_msg(self, *args, **kwargs)
+    def do_get_prev_msg(self, *args, **kwargs):
+        self.get_prev_msg(self, *args, **kwargs)
 
     def get_focus(self):
         convpos, msgpos, statepos = self.focus
-        w = self._cache[convpos][msgpos][statepos]
-        return w, self.focus
+        __w = self._cache[convpos][msgpos][statepos]
+        return __w, self.focus
 
     def set_focus(self, focus):
         convpos, msgpos, statepos = focus
@@ -406,76 +414,3 @@ class read_walker(urwid.ListWalker):
                 return mdef(convpos-1, -1, -1)
             return mdef(convpos, msgpos-1, -1)
         return mdef(convpos, msgpos, statepos-1)
-
-    '''
-    def get_focus(self):
-        msgidx, stateidx = self.focus
-        widget = attrgetter(self._cache[msgidx], self.part_order[stateidx])
-        return widget, self.focus
-
-    def set_focus(self, focus):
-        msgidx, stateidx = focus
-        self.focus = msgidx, stateidx
-        self._modified()
-
-    def get_next(self, start_from):
-        msgidx, stateidx, minoridx = start_from
-        if minoridx == 0:
-            if stateidx == 0:
-                if fold_dict[self._cache[msgidx].state]:
-                    if msgidx == len(self._cache)-1:
-                        return None, None, None
-                    else:
-                        return msgidx+1, 0, 0
-
-        if not self._cache[msgidx][stateidx].state:
-            return msgidx, stateidx+1, 0
-        if minoridx == len(self._cache[msgidx][stateidx])-1:
-            if stateidx == len(self._cache[msgidx])-1:
-                if msgidx == len(self._cache)-1:
-                    return None, None, None
-                else:
-    def get_next(self, start_from):
-        msgidx, stateidx = start_from
-        def advance_one(msgidx, stateidx):
-            if stateidx == len(self.part_order)-1:
-                if msgidx == len(self._cache)-1:
-                    return None, None
-                else:
-                    msgidx += 1
-                    stateidx = 0
-            else:
-                stateidx += 1
-            return msgidx, stateidx
-        msgidx, stateidx = advance_one(msgidx, stateidx)
-        while 1:
-            try: widget = attrgetter(self._cache[msgidx], self.part_order[stateidx])
-            except: msgidx, stateidx = advance_one(msgidx, stateidx)
-            else: break
-        return widget, (msgidx, stateidx)
-
-    def get_prev(self, start_from):
-        msgidx, stateidx = start_from
-        def back_one(msgidx, stateidx):
-            if not stateidx:
-                if not msgidx:
-                    return None, None
-                else:
-                    msgidx -= 1
-                    go_last = True
-            else:
-                stateidx -= 1
-                go_last = False
-            return msgidx, stateidx, go_last
-        msgidx, stateidx, go_last = back_one(msgidx, stateidx)
-        while 1:
-            if go_last:
-                widget = attrgetter(self._cache[msgidx], 'last')
-                stateidx = self.part_order.index(widget.state)
-                break
-            else:
-                try: widget = attrgetter(self._cache[msgidx], self.part_order[stateidx])
-                except: msgidx, stateidx, go_last = back_one(msgidx, stateidx)
-        return widget, (msgidx, stateidx)
-        '''
-    #}}}

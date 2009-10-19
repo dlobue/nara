@@ -11,10 +11,6 @@ from bisect import insort_right
 from weakref import WeakValueDictionary
 from uuid import uuid4
 
-from bsddb import dbshelve
-import bsddb
-db = bsddb.db
-
 
 def stripSubject(subj):
     '''strips out all "re:"s and "fwd:"s'''
@@ -60,15 +56,6 @@ def xap_container(msg):
     return convContainer(__msgids, __subjects, __labels,
                             [(msg.get('date')[0], msg)],
                             threadid=__threadid)
-
-
-def conv_callback(key, data):
-    return '%s%s' % (data.last_update.isoformat(), data.id)
-    #return uniencode_date(data.last_update)
-
-def conv_btree_cmp(keya, keyb):
-    return cmp(keya, keyb)*-1
-    #return cmp(unidecode_date(keya), unidecode_date(keyb))*-1
 
 class convContainer(dict):
     def __init__(self, msgids, subjects, labels, messages, threadid=None):
@@ -185,6 +172,18 @@ class lazy_thread(object):
             else:
                 if self[key] is not msgobj:
                     if self[key] not in self.duplist:
+                        try:
+                            global dodebug
+                            if dodebug:
+                                global dupcount
+                                dupcount +=1
+                                print 'merging preexisting threads'
+                                print 'key ', key
+                                print 'found ', len(self[key].messages)
+                                print 'new ', len(msgobj.messages)
+                                #print 'found ', self[key].messages
+                                #print 'new ', msgobj.messages
+                        except: pass
                         self.duplist.append(self[key])
                         self.merge(self[key], msgobj)
                         self.sumlist.extend([x for x in \
@@ -302,15 +301,32 @@ class lazy_thread(object):
 
 
 if __name__ == '__main__':
-    import time, xappy
+    global dodebug
+    dodebug = True
+    if dodebug:
+        global dupcount
+        dupcount = 0
+    dotime = True
+    doram = True
+    if dotime: import time
+    if doram:
+        from guppy import hpy
+        hp = hpy()
+    import xappy
     msgthread = lazy_thread()
+    if doram: hp.setrelheap()
     xconn = xappy.IndexerConnection('xap.idx')
     r = (xconn.get_document(x).data for x in xconn.iterids())
     print 'going for broke - lets thread!'
-    t = time.time()
+    if dotime: t = time.time()
     msgthread.thread(r)
     print 'done threading!'
-    t  = time.time() - t
-    print 'message threading took %r seconds' % t
+    if dodebug:
+        print dupcount
+    if dotime: t  = time.time() - t
+    if dotime: print 'message threading took %r seconds' % t
     print len(msgthread.threadList)
-    input('check ram usage')
+    if doram:
+        h = hp.heap()
+        print h
+        print '\n'

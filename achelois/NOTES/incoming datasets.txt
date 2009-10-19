@@ -1,0 +1,42 @@
+In [17]: z._headers
+Out[17]:
+[('Received',
+  'by Exchange2k3.corp.stamps.com \n\tid <01C9AED7.0B4F0EE8@Exchange2k3.corp.stamps.com>; Fri, 27 Mar 2009 05:24:58 -0700'),
+ ('MIME-Version', '1.0'),
+ ('Content-Type', 'text/plain;\n\tcharset="us-ascii"'),
+ ('Content-Transfer-Encoding', 'quoted-printable'),
+ ('Content-class', 'urn:content-classes:message'),
+ ('X-MimeOLE', 'Produced By Microsoft Exchange V6.5'),
+ ('Subject', 'RIP'),
+ ('Date', 'Fri, 27 Mar 2009 05:24:56 -0700'),
+ ('Message-ID',
+  '<4FBADAC527A3924D87D67F585A1AF37D1406233C@Exchange2k3.corp.stamps.com>'),
+ ('X-MS-Has-Attach', ''),
+ ('X-MS-TNEF-Correlator', ''),
+ ('Thread-Topic', 'RIP'),
+ ('Thread-Index', 'Acmu1wVOwmNr2WNHRbeSywbIEt1UFw=='),
+ ('From', '"David Saleh" <dsaleh@stamps.com>'),
+ ('To', '"DCORequests" <DCORequests@stamps.com>'),
+ ('Cc', '"PhotoStamps Operations" <PhotoStampsOperations@stamps.com>')]
+
+
+
+
+
+In [12]: d.data
+Out[12]:
+{'cc': ['"PhotoStamps Operations" <PhotoStampsOperations@stamps.com>'],
+ 'date': [datetime.datetime(2009, 3, 27, 5, 24, 56)],
+ 'flags': [''],
+ 'in_reply_to': [''],
+ 'labels': [''],
+ 'msgid': ['<4FBADAC527A3924D87D67F585A1AF37D1406233C@Exchange2k3.corp.stamps.com>'],
+ 'mtime': [datetime.datetime(2009, 7, 29, 17, 53, 31, 427985)],
+ 'muuid': ['1243857085_0.31259.dominiclinux.corp,U=81920,FMD5=7e33429f656f1e6e9d79b29c3f82c57e'],
+ 'osubject': ['RIP'],
+ 'recipient': [''],
+ 'references': [''],
+ 'sample': ['DCO,\n\nWe had requed some files nearly 45 minutes ago and have yet to see\nanythin'],
+ 'sender': ['"David Saleh" <dsaleh@stamps.com>'],
+ 'subject': ['RIP'],
+ 'thread': ['ddd54b3d79d6463da899ced5c674a42c']}

@@ -33,3 +33,43 @@ class mail_sources(list):
         return (__x.get_message(__i) for __x in self for __i in __x.iterkeys())
     def iterkeys(self):
         return (__i for __x in self for __i in __x.iterkeys())
+
+
+if __name__ == '__main__':
+    doram = True
+    if doram:
+        from guppy import hpy
+        hp = hpy()
+    sample_ids = [
+    '1243857186_2.31259.dominiclinux.corp,U=91211,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857379_3.31259.dominiclinux.corp,U=78486,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857662_0.2371.dominiclinux.corp,U=89091,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857615_9.2371.dominiclinux.corp,U=80199,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857184_3.31259.dominiclinux.corp,U=90619,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857582_1.2371.dominiclinux.corp,U=87966,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857317_0.31259.dominiclinux.corp,U=86132,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857660_0.2371.dominiclinux.corp,U=89040,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857351_4.31259.dominiclinux.corp,U=86418,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857256_3.31259.dominiclinux.corp,U=85851,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857208_2.31259.dominiclinux.corp,U=85014,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857627_6.2371.dominiclinux.corp,U=80312,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857289_3.31259.dominiclinux.corp,U=86116,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857579_5.2371.dominiclinux.corp,U=86671,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857591_2.2371.dominiclinux.corp,U=88098,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857566_11.2371.dominiclinux.corp,U=91349,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    '1243857682_5.2371.dominiclinux.corp,U=89592,FMD5=7e33429f656f1e6e9d79b29c3f82c57e',
+    ]
+    if doram: hp.setrelheap()
+    m = mail_sources()
+    c = 0
+    g = m.iterkeys()
+    while c < 500:
+        print g.next()
+        c+=1
+    print len(m)
+    del g
+    h1 = hp.heap()
+    for i in sample_ids: print m.get(i)
+    h2 = hp.heap()
+    print h1
+    print h2

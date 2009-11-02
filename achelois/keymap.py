@@ -1,26 +1,21 @@
+from lib.metautil import Singleton
 
-to do: put key bindings into yaml or json config files
+#TODO: put key bindings into yaml or json config files
 
+'''
 configs look like this:
 default = {
     context: {action: key, action: key, action: key},
     context: {action: key, action: key, action: key},
     context: {action: key, action: key, action: key},
-}
+    }
 
 custom = {
     context: {action: key, action: key, action: key},
     context: {action: key, action: key, action: key},
     context: {action: key, action: key, action: key},
-}
-
-class Singleton(object):
-    _instance = None
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = super(Singleton, cls).__new__(
-                                cls, *args, **kwargs)
-        return cls._instance
+    }
+'''
 
 class key_bind_manager(Singleton):
     """ This is a key bind manager for urwid.
@@ -53,6 +48,7 @@ class key_bind_manager(Singleton):
             try: return cls._default['%s%s' % (context, key)]
             except KeyError: return 'nomap'
 
+'''
 actionmap = {
         'resize': {
             'key': 'window resize',
@@ -65,3 +61,4 @@ actionmap = {
             'help': 'Load all threads (this may take a while...)',
             'modes': ['index']}
 }
+'''

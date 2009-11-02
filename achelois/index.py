@@ -18,53 +18,6 @@ import xappy
 
 #inuse_message_cache = None
 
-'''class threadindexer(object):
-    def __init__(self):
-        self.ix = whoosh.index.create_in(settings['threadixmetadir'], schema=schema)
-        self.writer = self.ix.writer(postlimit=256*1024*1024)
-        self.threader = lazythread.lazy_thread()
-
-    def index_threads(self):
-        q = result_machine()
-        r = q.search('*', sortkey=u'date', resultlimit=50000000)
-        self.threader.thread(r)
-        [add_thread(x) for x in self.threader.threadList]
-        self.writer.commit(OPTIMIZE)
-
-    def add_thread(self, msgobj):
-        random.seed(msgobj)
-        cid = random.random()*1000000
-
-        msgids = msgobj.get(u'msgids',[])
-        search_msgids = u' '.join(msgids).translate(badchars)
-        msgids = json.dumps(msgids, ensure_ascii=False)
-
-        labels = msgobj.get(u'labels',[])
-        search_labels = u' '.join(labels)
-        labels = json.dumps(labels, ensure_ascii=False)
-
-        subjects = msgobj.get(u'subjects',[])
-        search_subjects = u' '.join(subjects)
-        subjects = json.dumps(subjects, ensure_ascii=False)
-
-        messages = msgobj.get(u'messages',[])
-        last_received = messages[-1]['date']
-        messages = json.dumps(messages, ensure_ascii=False)
-
-        self.writer.add_document(cid=u'%i' % cid,
-                                msgids=search_msgids,
-                                _stored_msgids=msgids,
-                                labels=search_labels,
-                                _stored_labels=labels,
-                                subjects=search_subjects,
-                                _stored_subjects=subjects,
-                                messages=u'%s' % messages,
-                                last_received=last_received,)
-                                '''
-
-
-
-
 class indexer(object):
     def __init__(self):
 
@@ -229,7 +182,7 @@ class indexer(object):
         multi_add('recipient', split=True, strip=True, spliton=',')
         multi_add('cc', split=True, strip=True, spliton=',')
 
-        __doc.fields.append(xappy.Field('thread', ''))
+        #__doc.fields.append(xappy.Field('thread', ''))
         __doc.id = muuid
 
         return __doc
@@ -366,6 +319,6 @@ if __name__ == '__main__':
     #import time
     a = indexer()
     a.index_all()
-    ti = threadIndexer()
-    ti.start()
+    #ti = threadIndexer()
+    #ti.start()
     #ti.test_ids()

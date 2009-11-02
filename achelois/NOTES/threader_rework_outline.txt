@@ -8,6 +8,10 @@ set thread to ['indexme']
 when to thread?
 -when adding one at a time, prior to insertion
 -when adding a bunch at a time, after all are in index
+--
+when adding a bunch: what about prior to insertion, and after all the *new* messages have been put into their msg_containers?
+possibly... Q. how would i find them after they've been threaded?
+    A. prior to threading, create a hash of muuid to weakref of msg_container instance so you have a direct line
 
 how to combine threads?
 -dictify. thread entire index looking for threads that should be combined.

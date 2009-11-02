@@ -15,11 +15,31 @@ def flatnique(x):
 def unidecode_date(x):
     '''turn a unicoded date string made using uniencode_date back into a datetime object'''
     y = map(int, x.split(u','))
-    return datetime(y[0], y[1], y[2], y[3], y[4], y[5])
+    return datetime(*y[:5])
+    #return datetime(y[0], y[1], y[2], y[3], y[4], y[5])
 
 def uniencode_date(x):
     '''turn a datetime tuple into a unicode string seperated by commas'''
     return u','.join(map(unicode,x)[:6])
+
+def delNone(x):
+    '''
+    Ideal for use with sets.
+    Removes any "None" item from a list or set.
+    This includes empty strings, strings that consist
+    of a single space, or a string of the word None.
+    '''
+    def _delnone(nonetype):
+        try: x.remove(nonetype)
+        except ValueError: pass
+        except KeyError: pass
+    __thenones = ('', u'', ' ', u' ', 'None', u'None', None)
+    map(_delnone, __thenones)
+    return x
+
+def filterNone(x):
+    __thenones = ('', u'', ' ', u' ', 'None', u'None', None)
+    return filter(lambda y: y not in __thenones, x)
 
 def deuniNone(x):
     '''remove unicoded None's if found'''

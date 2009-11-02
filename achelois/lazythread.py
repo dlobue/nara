@@ -54,7 +54,7 @@ def xap_container(msg):
     except IndexError: __threadid = None
 
     return convContainer(__msgids, __subjects, __labels,
-                            [(msg.get('date')[0], msg)],
+                            [msg],
                             threadid=__threadid)
 
 class convContainer(dict):
@@ -74,7 +74,9 @@ class convContainer(dict):
 
     @property
     def last_update(self):
-        return self.messages[-1][0]
+        try: return self.messages[-1].sent
+        except: return self.messages[-1]['date']
+
     @property
     def id(self):
         return self['id']
@@ -227,12 +229,14 @@ class lazy_thread(object):
         self.merge(msgobj, self[key])
         self.dictify(self[key])
 
-    def thread(self, messages, pre_prepped=True):
+    def thread(self, messages, pre_prepped=True, need_container=True):
         #self._fcache = {}
         if pre_prepped:
             #__prep = [xap_container(msg) for msg in messages]
             #[self._thread(msg) for msg in __prep]
-            [self._thread(xap_container(msg)) for msg in messages]
+            if need_container:
+                messages = ( xap_container(msg) for msg in messages )
+            map(self._thread, messages)
         else:
             __text_prep = (self._msg_prep(msg) for msg in messages)
             [self._thread(msg) for msg in __text_prep]
@@ -301,13 +305,16 @@ class lazy_thread(object):
 
 
 if __name__ == '__main__':
+    from databasics import msg_factory, msg_container, conv_factory, conv_container
+    from offlinemaildir import mail_sources
+    mail_grab = mail_sources()
     global dodebug
-    dodebug = True
+    dodebug = False
     if dodebug:
         global dupcount
         dupcount = 0
     dotime = True
-    doram = True
+    doram = False
     if dotime: import time
     if doram:
         from guppy import hpy
@@ -315,11 +322,16 @@ if __name__ == '__main__':
     import xappy
     msgthread = lazy_thread()
     if doram: hp.setrelheap()
-    xconn = xappy.IndexerConnection('xap.idx')
-    r = (xconn.get_document(x).data for x in xconn.iterids())
+    xconn = xappy.SearchConnection('xap.idx')
+    #r = [ xconn.get_document(x).data for x in xconn.iterids() ]
+    r = (xconn.get_document(x) for x in xconn.iterids())
+    #r = [ msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() ]
+    #r = [ msg_factory(x.id, x.data) for x in r ]
+    r = ( msg_factory(x.id, x.data) for x in r )
+    r = map(conv_factory, r)
     print 'going for broke - lets thread!'
     if dotime: t = time.time()
-    msgthread.thread(r)
+    msgthread.thread(r, True, False)
     print 'done threading!'
     if dodebug:
         print dupcount

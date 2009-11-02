@@ -1,8 +1,11 @@
+#from overwatch import settings
+
 import os.path
 import mailbox
 from threading import Thread
 
-from settings import settings
+from settings import get_settings
+settings = get_settings()
 
 
 class mail_sources(list):
@@ -36,6 +39,9 @@ class mail_sources(list):
 
 
 if __name__ == '__main__':
+    m = mail_sources()
+    for i in m.iteritems(): print i
+    '''
     doram = True
     if doram:
         from guppy import hpy
@@ -73,3 +79,4 @@ if __name__ == '__main__':
     h2 = hp.heap()
     print h1
     print h2
+    '''

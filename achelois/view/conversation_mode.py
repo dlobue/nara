@@ -1,9 +1,10 @@
 #!/usr/bin/python
 
-from urwid import ListWalker, MetaSuper, MetaSignals, Signals, Text
+from urwid import ListWalker, Text
 from weakref import ref
 
 from achelois.lib.message_machine import msg_machine
+from achelois.lib.metautil import MetaMelt
 from achelois import offlinemaildir
 
 #from string import ascii_lowercase, digits, maketrans
@@ -45,70 +46,18 @@ fold_guide = {
         'ATTACHMENT': (False, False),
         }
 
-class BindException(Exception): pass
-class MetaSupSig(MetaSuper, MetaSignals): pass
-
-class MetaSuperSignals(object):
-    __slots__ = []
-    __metaclass__ = MetaSupSig
-    def _connect(self, signal, child, method):
-        Signals.connect(child, signal, method)
-
-    def _emit(self, signal, *args, **kwargs):
-        Signals.emit(self, signal, *args, **kwargs)
-
-class MetaBind(object):
-    __slots__ = []
-    def keypress(self, (maxcol,), key):
-        try:
-            __method = getattr(self, 'do_%s' % kbm[self.context, key])
-            __method((maxcol,),)
-        except AttributeError:
-            self._keybind_failover((maxcol,), key)
-
-    def _keybind_failover(self, (maxcol,), key):
-        raise BindError("Not set by default! Don't forget to set this method!")
-
-    def do_nomap(self, (maxcol,),):
-        raise AttributeError("Omg! What do I do!?")
-
-class MetaMelt(MetaBind, MetaSuperSignals):
-    __slots__ = []
-    signals = ['keypress', 'modified']
-    def all_connect(self, child):
-        def quack_filter(mthd):
-            if mthd.startswith('_') and mthd.endswith('connect'):
-                return True
-            return False
-        __cntrs = filter(quack_filter, dir(self))
-        [getattr(self, __x)(child) for __x in __cntrs]
-
-    def _kconnect(self, child):
-        self._connect('keypress', child, self.keypress)
-    def _kemit(self, (maxcol,), key):
-        self._emit('keypress', (maxcol,), key)
-    def _keybind_failover(self, (maxcol,), key):
-        self._kemit((maxcol,), key)
-
-    def _mconnect(self, child):
-        self._connect('modified', child, self._modified)
-    def _memit(self):
-        self._emit('modified')
-    def _modified(self):
-        self._memit()
-
 class text_select_templ(Text, MetaMelt):
-    __slots__ = []
+    __slots__ = ()
     _selectable = True
     ignore_focus = False
 
 class text_select(text_select_templ):
-    __slots__ = []
+    __slots__ = ()
     def keypress(self, (maxcol,), key):
         self._emit('keypress', (maxcol,), key)
 
 class text_select_collapse(text_select_templ):
-    __slots__ = []
+    __slots__ = ()
     expanded = False
     context = 'conversation_view'
     def __init__(self, __data, align='left', wrap='space', layout=None):
@@ -140,7 +89,7 @@ class text_select_collapse(text_select_templ):
 class collapser_label(text_select): pass
 
 class collapser(MetaMelt):
-    __slots__ = []
+    __slots__ = ()
     context = 'conversation_view'
     expanded = False
     detailed = False
@@ -231,7 +180,7 @@ class collapser(MetaMelt):
         list.append(self._cache, data)
 
 class group_state(collapser):
-    __slots__ = []
+    __slots__ = ()
     def auto_text(self):
         if self.expanded: return self.open
         else: return self.close
@@ -265,7 +214,7 @@ class group_state(collapser):
     '''
 
 class message_widget(collapser):
-    __slots__ = ['msgobj', '_state_order', ]
+    __slots__ = ('msgobj', '_state_order')
     def __init__(self, msgobj):
         __msg_get = mymail.get(msgobj['muuid'][0])
         __processed = msg_machine.process(__msg_get)
@@ -332,7 +281,7 @@ class message_widget(collapser):
     '''
 
 class read_walker(ListWalker, MetaMelt):
-    __slots__ = ['_cache', 'focus']
+    __slots__ = ('_cache', 'focus')
     def __init__(self, convobj):
         def quack(__x):
             __x.allconn_4cache()

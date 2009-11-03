@@ -16,6 +16,9 @@ import xappy
 from lib.metautil import Singleton, MetaSuper
 from databasics import msg_fields, msg_container, msg_factory, lazythread_container, conv_factory
 
+import threadmap
+import forkmap
+
 srchidx = 'xap.idx'
 
 class XapProxy(Singleton):
@@ -45,7 +48,7 @@ class XapProxy(Singleton):
                 self.indexer_started = False
                 break
             task, args, kwargs = job
-            getattr(self.idxconn, task)(*args, **kwargs)
+            getattr(self._idxconn, task)(*args, **kwargs)
             self._queue.task_done()
 
     def thread_init(self):
@@ -134,7 +137,7 @@ def _preindex_thread(msgs):
         all_msgs = map(conv_factory, all_msgs)
         threader.thread(all_msgs)
     print 'threader b4 convs %s' % len(threader)
-    threader.thread( map(conv_factory, msgs) )
+    threader.thread( threadmap.map(conv_factory, msgs) )
     print 'threader after convs %s' % len(threader)
     threader.dictify()
 
@@ -182,7 +185,6 @@ def _ensure_threading_integrity(threader=None):
 
     def ctid_to_mtid(conv):
         ctid = conv.thread
-        if len(ctid) == 2: ctid.remove(None)
         for msg in conv.messages:
             id_data_tple = (msg.muuid, [('thread', ctid)])
             if not msg.thread:
@@ -190,7 +192,7 @@ def _ensure_threading_integrity(threader=None):
             elif ctid != msg.thread:
                 to_replace.append(id_data_tple)
 
-    map(ctid_to_mtid, threader)
+    forkmap.map(ctid_to_mtid, threader)
     docs = modify_factory(to_update, update_existing)
     docs.extend( modify_factory(to_replace, replace_existing) )
     return docs
@@ -208,7 +210,7 @@ def modify_factory(id_data_tples, modify_callback):
     """
     __docs = ( (_get_doc(muuid), data) for muuid,data in id_data_tples )
     __docs = modify_callback(__docs)
-    __docs = map(itemgetter(1), __docs)
+    __docs = threadmap.map(itemgetter(1), __docs)
     return __docs
 
 def remove_fields(doc_data_tples):
@@ -221,7 +223,7 @@ def remove_fields(doc_data_tples):
     return __docs
 
 def _remove_fields(doc, fields):
-    map(doc.clear_field, fields)
+    threadmap.map(doc.clear_field, fields)
     return doc
 
 def replace_existing(doc_data_tples):
@@ -243,7 +245,7 @@ def update_existing(doc_data_tples):
         def per_field(data_tple):
             field, datas = data_tple
             [ _do_append_field(doc, field, data) for data in datas ]
-        map(per_field, data_tples)
+        threadmap.map(per_field, data_tples)
         return doc
 
     __docs = ( (per_doc(doc, data_tples), data_tples) for doc,data_tples in doc_data_tples )
@@ -348,14 +350,15 @@ def index_factory(msgs, ensure=False):
 
     if ensure or msg_count > 10 or since_last > 10:
         msgs, threader =_preindex_thread(msgs)
-    __docs = map(make_doc, msgs)
+    __docs = forkmap.map(make_doc, msgs)
     if ensure or since_last > 10:
         __docs.extend( _ensure_threading_integrity(threader) )
-    __docs = map(xconn.process, __docs)
-    map(xconn.replace, __docs)
+    __docs = threadmap.map(xconn.process, __docs)
+    threadmap.map(xconn.replace, __docs)
     xconn.flush()
 
 
 if __name__ == '__main__':
-    all_rmsgs = [ msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() ]
+    #all_rmsgs = [ msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() ]
+    all_rmsgs = forkmap.map(lambda x,y: msg_factory(x, y), mail_grab.iteritems())
     index_factory(all_rmsgs, True)

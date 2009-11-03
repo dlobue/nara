@@ -16,6 +16,8 @@ import pdb
 
 #other modules i need that aren't sys, and I didn't write
 from xappy.datastructures import ProcessedDocument
+import threadmap
+import forkmap
 
 #lastly my tools
 from tools import unidecode_date, delNone, filterNone
@@ -81,8 +83,8 @@ class conv_container(object):
 	    getattr(self, x).update(getattr(msg_cntr, x))
 	def do_insort(x):
 	    insort_right(self.messages, x)
-	map(domerge, tomerge)
-	map(do_insort, minsort('messages'))
+	threadmap.map(domerge, tomerge)
+	threadmap.map(do_insort, minsort('messages'))
 
 class conv_container_orig(object):
     __slots__ = ('__weakref__', '_container')

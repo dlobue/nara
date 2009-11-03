@@ -64,7 +64,7 @@ class XapProxy(Singleton):
 
     def _q_add(self, action):
         def wrapper(*args, **kwargs):
-            self._queue.add(action, args, kwargs)
+            self._queue.put((action, args, kwargs))
             if not self.indexer_started: self.indexer_init()
             if not self.thread_started: self.thread_init()
         return wrapper
@@ -136,13 +136,37 @@ def _preindex_thread(msgs):
     print 'threader b4 convs %s' % len(threader)
     threader.thread( map(conv_factory, msgs) )
     print 'threader after convs %s' % len(threader)
+    threader.dictify()
 
-    pdb.set_trace()
+    #pdb.set_trace()
+    c = 0
+    ct = 0
+    for conv in threader:
+        ct+= len(conv.messages)
+        if len(conv.messages) == 1:
+            c+=1
 
-    for key in tracker:
-        conv = threader[key]
-        threadid = conv.thread
-        tracker[key].thread.append(threadid[0])
+    print "found %s threads with one msg" % c
+    print "threader contains %s messages out of a total %s" % (ct, len(msgs))
+
+    c = 0
+    if all_msgs:
+        for key in tracker:
+            msg = tracker[key]
+            try:
+                try: conv = threader[key]
+                except: conv = threader[msg.subject[0]]
+            except:
+                c+=1
+                '''
+                print "unable to find msg in thread"
+                print key
+                print msg.subject[0]
+                '''
+                continue
+            threadid = conv.thread
+            msg.thread.extend(threadid)
+        print "%s messages didn't find a thread" % c
     return msgs, threader
 
 def _ensure_threading_integrity(threader=None):
@@ -216,7 +240,8 @@ def update_existing(doc_data_tples):
         (doc, [(field, (data,)), (field, (data, data,...)), (field, (data,))])
     """
     def per_doc(doc, data_tples):
-        def per_field(field, datas):
+        def per_field(data_tple):
+            field, datas = data_tple
             [ _do_append_field(doc, field, data) for data in datas ]
         map(per_field, data_tples)
         return doc
@@ -280,7 +305,7 @@ def _make_doc(msg):
         else:
             __data = getattr(msg, field)
 
-        if field == 'muuid': __doc.id = __data[0]
+        if field == 'muuid': doc.id = __data[0]
         if hasattr(__data, '__iter__'):
             [ _do_append_field(doc, field, __x) for __x in __data if __x ]
         else:
@@ -289,6 +314,8 @@ def _make_doc(msg):
     return doc
 
 def _get_doc(muuid):
+    if hasattr(muuid, '__iter__'):
+        muuid = muuid[0]
     try: doc = sconn.get_document(muuid)
     except KeyError:
         doc = make_doc(muuid)
@@ -331,5 +358,4 @@ def index_factory(msgs, ensure=False):
 
 if __name__ == '__main__':
     all_rmsgs = [ msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() ]
-    print len(all_rmsgs)
     index_factory(all_rmsgs, True)

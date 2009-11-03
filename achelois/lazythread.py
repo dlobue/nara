@@ -10,7 +10,9 @@ from tools import deuniNone, unidecode_date
 from bisect import insort_right
 from weakref import WeakValueDictionary
 from uuid import uuid4
+from databasics import conv_container
 
+old_merge = False
 
 def stripSubject(subj):
     '''strips out all "re:"s and "fwd:"s'''
@@ -187,7 +189,10 @@ class lazy_thread(object):
                                 #print 'new ', msgobj.messages
                         except: pass
                         self.duplist.append(self[key])
-                        self.merge(self[key], msgobj)
+                        if type(msgobj) is conv_container:
+                            msgobj.merge(self[key])
+                        else:
+                            self.merge(self[key], msgobj) #merge self[key] into msgobj
                         self.sumlist.extend([x for x in \
                                 msgobj.msgids|msgobj.subjects \
                                 if x not in self.sumlist])
@@ -208,8 +213,14 @@ class lazy_thread(object):
             [self.dictify(msgobj) for msgobj in self.threadList]
 
     def merge(self, found, workobj):
+        """
+        note to self: found is being thrown away. workobj is being kept.
+        found is being merged into workobj
+        """
         def fun(key):
-            return [__x for __x in found[key] if __x not in workobj[key]]
+            try: return [__x for __x in found[key] if __x not in workobj[key]]
+            except: return [ __x for __x in getattr(found, key) if __x not in getattr(workobj, key) ]
+
         def do_insort(x):
             insort_right(workobj.messages,x)
 
@@ -219,6 +230,10 @@ class lazy_thread(object):
 
         map(do_insort, fun('messages'))
 
+        global old_merge
+        if not old_merge:
+            old_merge = True
+
     def append(self, data):
         #data['id'] = uuid4().hex
         #self._fcache[data.id] = data
@@ -226,7 +241,10 @@ class lazy_thread(object):
         self.dictify(data)
 
     def extend(self, key, msgobj):
-        self.merge(msgobj, self[key])
+        if type(self[key]) is conv_container:
+            self[key].merge(msgobj)
+        else:
+            self.merge(msgobj, self[key]) #merge msgobj into self[key]
         self.dictify(self[key])
 
     def thread(self, messages, pre_prepped=True, need_container=True):
@@ -305,8 +323,9 @@ class lazy_thread(object):
 
 
 if __name__ == '__main__':
-    from databasics import msg_factory, msg_container, conv_factory, conv_container
+    from databasics import msg_factory, msg_container, conv_factory, conv_container, lazythread_container
     from offlinemaildir import mail_sources
+    import pdb
     mail_grab = mail_sources()
     global dodebug
     dodebug = False
@@ -320,24 +339,31 @@ if __name__ == '__main__':
         from guppy import hpy
         hp = hpy()
     import xappy
-    msgthread = lazy_thread()
+    #msgthread = lazy_thread()
+    msgthread = lazythread_container()
     if doram: hp.setrelheap()
     xconn = xappy.SearchConnection('xap.idx')
     #r = [ xconn.get_document(x).data for x in xconn.iterids() ]
     r = (xconn.get_document(x) for x in xconn.iterids())
-    #r = [ msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() ]
+    print 'making msg_containers now'
+    #r = ( msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() )
+    r = [ msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() ]
     #r = [ msg_factory(x.id, x.data) for x in r ]
-    r = ( msg_factory(x.id, x.data) for x in r )
+    #r = ( msg_factory(x.id, x.data) for x in r )
+    print 'now making conv_containers'
     r = map(conv_factory, r)
+    #pdb.set_trace()
     print 'going for broke - lets thread!'
     if dotime: t = time.time()
-    msgthread.thread(r, True, False)
+    msgthread.thread(r)
+    #msgthread.thread(r, True, False)
     print 'done threading!'
+    print 'was old merging used? %r' % old_merge
     if dodebug:
         print dupcount
     if dotime: t  = time.time() - t
     if dotime: print 'message threading took %r seconds' % t
-    print len(msgthread.threadList)
+    print len(msgthread)
     if doram:
         h = hp.heap()
         print h

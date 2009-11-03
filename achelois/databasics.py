@@ -51,6 +51,40 @@ class msg_container(object):
 
 #class conv_container(_conv_container):
 class conv_container(object):
+    __slots__ = ('__weakref__', 'msgids', 'subjects', 'labels', 'thread', 'messages')
+
+    def __init__(self, msgids, subjects, labels, thread, messages):
+        self.msgids = msgids
+        self.subjects = subjects
+        self.labels = labels
+        self.thread = thread
+        self.messages = messages
+
+    #def __getattr__(self, name):
+        #return getattr(self._container, name)
+
+    @property
+    def last_update(self):
+        return self.messages[-1].sent
+
+    def get(self, key, alt=None):
+        try: return getattr(self, key)
+        except AttributeError:
+            print "couldn't find attribute %s, wtf?" % key
+            return alt
+
+    def merge(self, msg_cntr):
+        tomerge = ('msgids', 'subjects', 'labels')
+	def minsort(x):
+	    return [ __x for __x in getattr(msg_cntr, x) if __x not in getattr(self, x)]
+	def domerge(x):
+	    getattr(self, x).update(getattr(msg_cntr, x))
+	def do_insort(x):
+	    insort_right(self.messages, x)
+	map(domerge, tomerge)
+	map(do_insort, minsort('messages'))
+
+class conv_container_orig(object):
     __slots__ = ('__weakref__', '_container')
 
     def __init__(self, *convargs):
@@ -119,11 +153,12 @@ class lazythread_container(thread_container):
     __slots__ = ('_duplist', '_sumlist')
     def append(self, conv):
         if not conv.thread:
-            conv.thread.extend([uuid4().hex, None])
+            conv.thread.append(uuid4().hex)
         self.__super.append(conv)
         self.dictify(conv)
 
     def extend(self, keymatch, new):
+        #pdb.set_trace()
         self[keymatch].merge(new)
         self.dictify(self[keymatch])
 

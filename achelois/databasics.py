@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #observer pattern.. i think
-from overwatch import mail_grab
+from overwatch import mail_grab, emit_signal, eband
 
 #system modules
 from collections import deque, namedtuple

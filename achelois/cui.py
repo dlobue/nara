@@ -1,6 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+from overwatch import settings, MetaSignals, connect_signal, emit_signal, eband
+
 import urwid.curses_display
 import urwid
 from buffer import buffer_manager
@@ -19,6 +21,9 @@ class info_log_list(deque):
 keymap_alias = {'k':'up', 'j':'down', 'h':'left', 'l':'right', 'J':'page down', 'K':'page up'}
 
 class Screen(object):
+    __metaclass__ = MetaSignals
+    signals = ['emergency']
+
     palette = [
             ('body', 'light gray', 'black'),
             ('selected', 'white', 'black', ('bold')),
@@ -48,6 +53,12 @@ class Screen(object):
             ('index label focus', 'brown', 'dark cyan', ('bold')),
             ('index sample focus', 'light cyan', 'dark cyan', ('bold')),
             ]
+    def __init__(self):
+        connect_signal(eband, 'emergency', self.shutdown)
+
+    def shutdown(self):
+        self.tui.stop()
+
     def addLine(self, text):
         self.lines.append(urwid.Text(text))
         self.listbox.set_focus(len(self.lines) - 1)

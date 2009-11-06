@@ -38,8 +38,8 @@ def delNone(x):
     return x
 
 def filterNone(x):
-    __thenones = ('', u'', ' ', u' ', 'None', u'None', None)
-    return filter(lambda y: y not in __thenones, x)
+    thenones = ('', u'', ' ', u' ', 'None', u'None', None)
+    return filter(lambda y: y not in thenones, x)
 
 def deuniNone(x):
     '''remove unicoded None's if found'''

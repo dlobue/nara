@@ -179,10 +179,17 @@ class ProcessedDocument(object):
         Removes search term given from specified field.
         """
         __prefix = self._fieldmappings.get_prefix(field)
+        #return self._doc.remove_term('%s%s' % (__prefix, term))
         try:
             return self._doc.remove_term('%s%s' % (__prefix, term))
-        except InvalidArgumentError:
-            return self._doc.remove_term('%s%s' % (__prefix, term.lower()))
+        except xapian.InvalidArgumentError:
+            try: return self._doc.remove_term('%s%s' % (__prefix, term.lower()))
+            except:
+                print __prefix
+                print term
+                print self.data
+                print self.id
+                self._doc.remove_term('%s%s' % (__prefix, term.lower()))
 
     def remove_value(self, field, purpose=''):
         """

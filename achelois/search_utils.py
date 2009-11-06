@@ -16,8 +16,8 @@ def get_members(sconn, tids):
 
 def search(sconn, query, collapse=False):
     __searchargs = (0, 99999999)
-    __searchkwargs = {'checkatleast': -1, 'sortby': '-date'}
+    __searchkwargs = {'checkatleast': -1, 'sortby': '-sent'}
     if collapse: __searchkwargs['collapse'] = 'thread'
-    __results = sconn(query, *__searchargs, **__searchkwargs)
+    __results = sconn.search(query, *__searchargs, **__searchkwargs)
     return __results
 

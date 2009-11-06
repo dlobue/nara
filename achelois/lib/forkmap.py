@@ -41,8 +41,11 @@ def map(f, *a, **kw):
       s = marshal.dumps(obj)
       s = struct.pack('i', len(s)) + s
     except:
-      s = cPickle.dumps(obj)
-      s = struct.pack('i', -len(s)) + s
+        try: s = cPickle.dumps(obj)
+        except:
+            print obj
+            s = cPickle.dumps(obj)
+        s = struct.pack('i', -len(s)) + s
     os.write(pipe, s)
 
   def readobj(pipe):
@@ -109,6 +112,9 @@ def map(f, *a, **kw):
   return ans
 
 def bench():
+  from multiprocessing import Pool
+  import threadmap
+  pool = Pool()
   print 'Benchmark:\n'
   def timefunc(F):
     start = time.time()
@@ -118,18 +124,32 @@ def bench():
     return builtin_map(lambda x: pow(x,10**1000,10**9), range(10**3))
   def g1():
     return map(lambda x: pow(x,10**1000,10**9), range(10**3))
+  def h1():
+    return threadmap.map(lambda x: pow(x,10**1000,10**9), range(10**3))
+  def i1():
+    return pool.map(lambda x: pow(x,10**1000,10**9), range(10**3))
   def f2():
     return builtin_map(lambda x: x**2, range(10**6))
   def g2():
     return map(lambda x: x**2, range(10**6))
+  def h2():
+    return threadmap.map(lambda x: x**2, range(10**6))
+  def i2():
+    return pool.map(lambda x: x**2, range(10**6))
   import timeit
   print 'Expensive operation, 10**3 items:'
-  print 'map         (1 processor): ', timefunc(f1), 's'
-  print 'forkmap.map (%d processors):' % nproc, timefunc(g1), 's'
+  print 'map                  (1 processor): ', timefunc(f1), 's'
+  print 'forkmap.map          (%d processors):' % nproc, timefunc(g1), 's'
+  print 'threadmap.map        (%d processors):' % nproc, timefunc(h1), 's'
+  #try: print 'multiprocessing.map  (%d processors):' % nproc, timefunc(i1), 's'
+  #except: print "multiprocessing map failed"
   print
   print 'Cheap operation, 10**6 items:'
-  print 'map         (1 processor): ', timefunc(f2), 's'
-  print 'forkmap.map (%d processors):' % nproc, timefunc(g2), 's'
+  print 'map                  (1 processor): ', timefunc(f2), 's'
+  print 'forkmap.map          (%d processors):' % nproc, timefunc(g2), 's'
+  print 'threadmap.map        (%d processors):' % nproc, timefunc(h2), 's'
+  #try: print 'multiprocessing.map  (%d processors):' % nproc, timefunc(i2), 's'
+  #except: print "multiprocessing map failed"
 
 def test():
   print 'Testing:'
@@ -165,5 +185,5 @@ def test():
   print 'forkmap.map: OK'
 
 if __name__ == '__main__':
-  test()
+  #test()
   bench()

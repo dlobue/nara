@@ -2,14 +2,13 @@
 
 from overwatch import mail_grab, settings
 
-import pdb
-
-from weakref import WeakValueDictionary
 from email.iterators import typed_subpart_iterator
 from Queue import Queue, Empty
 from threading import Thread
 from operator import itemgetter
 from types import GeneratorType
+
+from datetime import datetime
 
 import xappy
 
@@ -29,9 +28,9 @@ class XapProxy(Singleton):
     indexer_started = False
     _idxconn = None
 
-    def __init__(self):
-        self.indexer_init()
-        self.thread_init()
+    #def __init__(self):
+        #self.indexer_init()
+        #self.thread_init()
 
     def __getattr__(self, name):
         if name in xappy.IndexerConnection.__dict__:
@@ -43,12 +42,19 @@ class XapProxy(Singleton):
             try: job = self._queue.get(True, 30)
             except Empty:
                 self._idxconn.flush()
+                try: sconn.reopen()
+                except: pass
                 self._idxconn.close()
                 self.thread_started = False
                 self.indexer_started = False
                 break
             task, args, kwargs = job
             getattr(self._idxconn, task)(*args, **kwargs)
+
+            if task == 'flush':
+                print "%s - processing flush now" % datetime.now()
+                try: sconn.reopen()
+                except: pass
             self._queue.task_done()
 
     def thread_init(self):
@@ -122,7 +128,10 @@ def _set_field_actions(idxconn):
     return idxconn
 
 xconn = XapProxy()
-sconn = xappy.SearchConnection(srchidx)
+try: sconn = xappy.SearchConnection(srchidx)
+except:
+    xconn.indexer_init()
+    sconn = xappy.SearchConnection(srchidx)
 
 def _preindex_thread(msgs):
     tracker = {}
@@ -133,15 +142,14 @@ def _preindex_thread(msgs):
     threader = lazythread_container()
     all_msgs = iterdocs()
     if all_msgs:
-        all_msgs = ( msg_factory( xmsg['muuid'][0], xmsg ) for xmsg in all_msgs )
-        all_msgs = map(conv_factory, all_msgs)
+        print 'yes to all_msgs'
+        all_msgs = map(msg_factory, all_msgs)
+        all_msgs = threadmap.map(conv_factory, all_msgs)
         threader.thread(all_msgs)
     print 'threader b4 convs %s' % len(threader)
     threader.thread( threadmap.map(conv_factory, msgs) )
     print 'threader after convs %s' % len(threader)
-    threader.dictify()
 
-    #pdb.set_trace()
     c = 0
     ct = 0
     for conv in threader:
@@ -176,8 +184,8 @@ def _ensure_threading_integrity(threader=None):
     if not threader:
         threader = lazythread_container()
         all_msgs = iterdocs()
-        all_msgs = ( msg_factory( xmsg['muuid'][0], xmsg ) for xmsg in all_msgs )
-        all_msgs = map(conv_factory, all_msgs)
+        all_msgs = map(msg_factory, all_msgs)
+        all_msgs = threadmap.map(conv_factory, all_msgs)
         threader.thread(all_msgs)
 
     to_update = []
@@ -192,7 +200,9 @@ def _ensure_threading_integrity(threader=None):
             elif ctid != msg.thread:
                 to_replace.append(id_data_tple)
 
-    forkmap.map(ctid_to_mtid, threader)
+    threadmap.map(ctid_to_mtid, threader)
+    print "in update queue  %i" % len(to_update)
+    print "in replace queue %i" % len(to_replace)
     docs = modify_factory(to_update, update_existing)
     docs.extend( modify_factory(to_replace, replace_existing) )
     return docs
@@ -210,7 +220,7 @@ def modify_factory(id_data_tples, modify_callback):
     """
     __docs = ( (_get_doc(muuid), data) for muuid,data in id_data_tples )
     __docs = modify_callback(__docs)
-    __docs = threadmap.map(itemgetter(1), __docs)
+    __docs = threadmap.map(itemgetter(0), __docs)
     return __docs
 
 def remove_fields(doc_data_tples):
@@ -223,7 +233,7 @@ def remove_fields(doc_data_tples):
     return __docs
 
 def _remove_fields(doc, fields):
-    threadmap.map(doc.clear_field, fields)
+    map(doc.clear_field, fields)
     return doc
 
 def replace_existing(doc_data_tples):
@@ -244,8 +254,8 @@ def update_existing(doc_data_tples):
     def per_doc(doc, data_tples):
         def per_field(data_tple):
             field, datas = data_tple
-            [ _do_append_field(doc, field, data) for data in datas ]
-        threadmap.map(per_field, data_tples)
+            map(_do_append_field(doc, field), datas)
+        map(per_field, data_tples)
         return doc
 
     __docs = ( (per_doc(doc, data_tples), data_tples) for doc,data_tples in doc_data_tples )
@@ -287,15 +297,15 @@ def _content_parse(muuid):
         __content = [m.get_payload(decode=True) for m in \
                         typed_subpart_iterator(msg, 'text', 'plain') \
                         if 'filename' not in m.get('Content-Disposition','')]
-    __content = ' '.join(__content)
+        __content = ' '.join(__content)
     return __content
-    
+
 def make_doc(msg):
     if type(msg) is not msg_container:
         msg = msg_factory(msg)
     __doc = _make_doc(msg)
     return __doc
-        
+
 def _make_doc(msg):
     doc = xappy.UnprocessedDocument()
 
@@ -324,14 +334,17 @@ def _get_doc(muuid):
     return doc
 
 
-def _do_append_field(doc, field, data):
-    try: doc.fields.__iter__
-    except: doc.fields = []
-    doc.fields.append(xappy.Field(field, data))
-    return doc
+def _do_append_field(doc, field, data=None):
+    def wrapper(data):
+        try: doc.fields.__iter__
+        except: doc.fields = []
+        doc.fields.append(xappy.Field(field, data))
+        return doc
+    if data: return wrapper(data)
+    else: return wrapper
 
 def iterdocs():
-    return ( sconn.get_document(__x).data for __x in sconn.iterids() )
+    return ( _get_doc(__x) for __x in sconn.iterids() )
 
 def index_factory(msgs, ensure=False):
     if not hasattr(msgs, '__iter__'):
@@ -350,15 +363,68 @@ def index_factory(msgs, ensure=False):
 
     if ensure or msg_count > 10 or since_last > 10:
         msgs, threader =_preindex_thread(msgs)
-    __docs = forkmap.map(make_doc, msgs)
-    if ensure or since_last > 10:
-        __docs.extend( _ensure_threading_integrity(threader) )
-    __docs = threadmap.map(xconn.process, __docs)
-    threadmap.map(xconn.replace, __docs)
+    __docs = map(make_doc, msgs)
+    print 'after make_doc %i' % len(__docs)
+    #if ensure or since_last > 10:
+        #__docs.extend( _ensure_threading_integrity(threader) )
+    #__docs = map(xconn.process, __docs)
+    map(xconn.replace, __docs)
     xconn.flush()
 
 
 if __name__ == '__main__':
+    import time
+    print 'iterating through mail and creating msg_containers'
+    #t = time.time()
     #all_rmsgs = [ msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() ]
-    all_rmsgs = forkmap.map(lambda x,y: msg_factory(x, y), mail_grab.iteritems())
-    index_factory(all_rmsgs, True)
+    #all_msgs = forkmap.map(msg_factory, mail_grab.iteritems())
+    #t = time.time() - t
+    #print "done! took %r seconds" % t
+    #print 'all_rmsgs %i' % len(all_msgs)
+
+    #print 'starting index factory now'
+    #t = time.time()
+    #index_factory(all_msgs, True)
+    #t = time.time() - t
+    #print "done! took %r seconds" % t
+
+
+    #import sys
+    #sys.exit()
+    print "building msgs now"
+    t = time.time()
+    all_msgs = map(msg_factory, iterdocs())
+    t = time.time() - t
+    print "done! took %r seconds" % t
+    threader = lazythread_container()
+    print "building conversations"
+    t = time.time()
+    convs = map(conv_factory, all_msgs)
+    #convs = threadmap.map(conv_factory, all_msgs)
+    t = time.time() - t
+    print "done! took %r seconds" % t
+    print 'threading'
+    t = time.time()
+    threader.thread( convs )
+    t = time.time() - t
+    print "done! took %r seconds" % t
+    print len(threader), ' conversations'
+    c = 0
+    for conv in threader:
+        c+=len(conv.messages)
+    print c, " total messages, out of 8990"
+    import sys
+    sys.exit()
+    print 'running integrity checker'
+    t = time.time()
+    docs = _ensure_threading_integrity(threader)
+    t = time.time() - t
+    print "done! took %r seconds" % t
+    print 'queueing docs'
+    t = time.time()
+    #map(xconn.replace, docs)
+    #xconn.flush()
+    t = time.time() - t
+    print "done! took %r seconds" % t
+    print "waiting for work to finish"
+    print "%s - started waiting at" % datetime.now()

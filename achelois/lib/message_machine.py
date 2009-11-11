@@ -38,11 +38,17 @@ class msg_machine(object):
         cls.appendee = []
         cls.prev_state = 'MSG'
         tolerance = 0
+        empty_tolerance = 0
 
         def _flush(newstate, theline):
             if cls.appendee:
-                subpart_states.append(tuple([cls.prev_state, u'\n'.join(cls.appendee)]))
-                #subpart_states.append(tuple([cls.prev_state, u''.join(cls.appendee)]))
+                while 1:
+                    endone = cls.appendee.pop()
+                    if endone:
+                        cls.appendee.append(endone)
+                        break
+                #subpart_states.append(tuple([cls.prev_state, u'\n'.join(cls.appendee)]))
+                subpart_states.append(tuple([cls.prev_state, '\n'.join(cls.appendee)]))
             cls.appendee = []
             if newstate != 'eof':
                 cls.prev_state = newstate
@@ -52,8 +58,12 @@ class msg_machine(object):
             try: line = subpart_gen.next()
             except StopIteration: break
 
-            if line == '': continue
-            #line = rstrip(line)
+            if line == '':
+                if empty_tolerance: continue
+                else: empty_tolerance = 1
+            elif empty_tolerance: empty_tolerance = 0
+            #if line == '': continue
+            #line = line.rstrip()
 
             if line in block_start:
                 _flush('BLOCK', line)

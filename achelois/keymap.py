@@ -1,4 +1,4 @@
-from lib.metautil import Singleton
+#from achelois.lib.metautil import Singleton
 
 #TODO: put key bindings into yaml or json config files
 
@@ -17,7 +17,27 @@ custom = {
     }
 '''
 
-class key_bind_manager(Singleton):
+default = {
+    'global': {
+        'cursor_up': ['k', 'up'],
+        'cursor_down': ['j', 'down'],
+        'cursor_page_up': ['K', 'page up'],
+        'cursor_page_down': ['J', 'page down'],
+        'activate': [' ', 'enter'],
+        },
+    'read_mode': {
+        'toggle_expanded': ['f'],
+        'toggle_detailed': ['d'],
+        'open_expanded': ['F'],
+        'open_detailed': ['D'],
+        'close_expanded': ['C'],
+        'close_detailed': ['c'],
+        },
+    }
+custom = {}
+
+#class key_bind_manager(Singleton):
+class key_bind_manager(object):
     """ This is a key bind manager for urwid.
     Its purpose is to centralize key configurations, and at
     the same time allow for customization by users without
@@ -34,8 +54,8 @@ class key_bind_manager(Singleton):
     @classmethod
     def load_settings(cls):
         def cmap(set_grp):
-            return [('%s%s' % (ctx, set_grp[ctx][act]), act)
-                        for ctx in set_grp for act in set_grp[ctx]]
+            return [('%s%s' % (ctx, key), act) for ctx in set_grp
+                        for act in set_grp[ctx] for key in set_grp[ctx][act]]
         cls._default.update(cmap(default))
         cls._custom.update(cmap(custom))
 
@@ -43,10 +63,15 @@ class key_bind_manager(Singleton):
     def __getitem__(cls, (context, key)):
         """First look for the key asked for in the custom
         configurations. If not found, then use the default"""
+        if context == 'global': nomap = 'nomap'
+        else: nomap = 'global'
         try: return cls._custom['%s%s' % (context, key)]
         except KeyError:
             try: return cls._default['%s%s' % (context, key)]
-            except KeyError: return 'nomap'
+            except KeyError: return nomap
+
+
+kbm = key_bind_manager()
 
 '''
 actionmap = {

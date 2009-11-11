@@ -1,28 +1,27 @@
 #!/usr/bin/python
 
 #observer pattern.. i think
-from overwatch import mail_grab, emit_signal, eband
+from overwatch import mail_grab, emit_signal, eband, MetaSignals, register_signal
+#from overwatch import mail_grab, eband, MetaSignals, Signals
 
 #system modules
 from collections import deque, namedtuple
 from operator import attrgetter
-from weakref import WeakValueDictionary
+from weakref import WeakValueDictionary, ref
 from bisect import insort_right
 from datetime import datetime
 from email.utils import parsedate
 from uuid import uuid4
 
 #other modules i need that aren't sys, and I didn't write
-from xappy.datastructures import ProcessedDocument
-import threadmap
-import forkmap
+from xappy.datastructures import ProcessedDocument, UnprocessedDocument
+from xappy.searchconnection import SearchResult
+import xappy
+from lib import threadmap, forkmap
 
 #lastly my tools
 from tools import unidecode_date, delNone, filterNone
 from lib.metautil import MetaSuper
-#from offlinemaildir import mail_sources
-
-#mail_grab = mail_sources()
 
 msg_fields = ('sent', 'sender', 'to', 'cc', 'subject', 'osubject', 'msgid', 'muuid', 'flags', 'labels', 'mtime', 'in_reply_to', 'references', 'sample', 'thread')
 conv_fields = ('nique_terms', 'labels', 'muuids', 'thread', 'messages')
@@ -30,12 +29,19 @@ conv_fields = ('nique_terms', 'labels', 'muuids', 'thread', 'messages')
 _msg_container = namedtuple('msg_container', msg_fields)
 _conv_container = namedtuple('conv_container', conv_fields)
 
+class prop_deque(deque):
+    __slots__ = ()
+    def __call__(self):
+        if len(self) == 1:
+            return self[0]
+        return self
+
 def auto_deque(func):
     def wrapper(*args, **kwargs):
         __ret = func(*args, **kwargs)
         if not hasattr(__ret, '__iter__'):
             __ret = [__ret]
-        return deque(__ret)
+        return prop_deque(__ret)
     return wrapper
 
 def stripSubject(subj):
@@ -61,17 +67,32 @@ def stripSubject(subj):
             return subj
 
 def msg_factory(muuid, msg=None):
-    if type(muuid) is tuple:
+    try:
+        muuid, msg = muuid.id, muuid.data
+    except AttributeError:
+        try:
+            muuid, msg = muuid.id, muuid.data
+        except: pass
+
+
+    '''
+    if type(muuid) is xappy.searchconnection.SearchResult:
+        muuid, msg = muuid.id, muuid.data
+    elif type(muuid) is tuple:
         muuid, msg = muuid
     elif type(muuid) is ProcessedDocument:
         muuid, msg = muuid.id, muuid.data
+    elif type(muuid) is SearchResult:
+        muuid, msg = muuid.id, muuid.data
+    elif type(muuid) is UnprocessedDocument:
+        muuid, msg = muuid.id, muuid.data
+        '''
+
     if not msg:
         msg = mail_grab.get(muuid)
+        if not msg:
+            raise KeyError("invalid muuid given! Couldn't find a message to parse!\nmuuid type is: %s" % str(type(muuid)))
     __r = _msg_factory(muuid, msg)
-    #except:
-        #    if type(msg) is not ProcessedDocument or \
-                #        not hasattr(msg, get_flags):
-            #        raise TypeError('Unsupported message type. Tried parsing anyway, but it still failed.\nMessage object type: %s' % type(msg))
     __r = msg_container(*__r)
     return __r
 
@@ -104,6 +125,7 @@ def _msg_factory(muuid, msg):
                 else: __data = do_multi(__data)
 
         return __data
+    #__data_m = map(do_get, msg_fields)
     __data_m = threadmap.map(do_get, msg_fields)
     return __data_m
 
@@ -115,7 +137,7 @@ def conv_factory(msg):
     return __r
 
 def _conv_factory(msg):
-    __muuid = deque(msg.get('muuid', []))
+    __muuid = prop_deque(msg.get('muuid', []))
 
     __msgid = set(msg.get('msgid', []))
     __in_reply = set(msg.get('in_reply_to', []))
@@ -129,7 +151,7 @@ def _conv_factory(msg):
     delNone(__labels)
 
     __thread = msg.get('thread',[])
-    __thread = deque(__thread)
+    __thread = prop_deque(__thread)
     return (__nique_terms, __labels, __muuid, __thread, [msg])
 
 class msg_container(_msg_container):
@@ -146,8 +168,8 @@ class msg_container(_msg_container):
         except AttributeError:
             return alt
 
-class obj_conv_container(object):
-    __slots__ = ('__weakref__', '_container', '_urwid_signals')
+class conv_container(object):
+    __slots__ = ('__weakref__', '_container', '_wcallback', '_urwid_signals')
     _factory_callback = staticmethod(_conv_factory)
 
     def __init__(self, *args, **kwargs):
@@ -188,14 +210,16 @@ class obj_conv_container(object):
             map(self.muuids.append, __res[2])
 
     def merge(self, dispose):
-	def do_insort(x):
-	    insort_right(self.messages, x)
+        def do_insort(x):
+            insort_right(self.messages, x)
             self.muuids.extend(x.muuid)
 
         self.nique_terms.update(dispose.nique_terms)
         self.labels.update(dispose.labels)
         threadmap.map(do_insort,
                 filter(lambda x: x.muuid[0] not in self.muuids, dispose.messages))
+        try: self._wcallback()()
+        except: pass
 
 class tup_conv_container(_conv_container):
     __slots__ = ()
@@ -231,7 +255,7 @@ class tup_conv_container(_conv_container):
         threadmap.map(do_insort,
                 filter(lambda x: x.muuid[0] not in self.muuids, dispose.messages))
 
-conv_container = obj_conv_container
+#conv_container = obj_conv_container
 
 class lazy_refmap(dict):
     __slots__ = ('_list', '_keyattr')
@@ -292,10 +316,10 @@ class thread_container(list):
             raise TypeError('Unable to thread that.')
             #return self.join(conv_container(item))
 
-    merge = join
+    _thread = join
 
     def thread(self, msgs):
-        map(self.merge, threadmap.map(conv_factory, msgs) )
+        map(self._thread, threadmap.map(conv_factory, msgs) )
         self.datesort()
         return
         

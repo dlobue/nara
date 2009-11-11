@@ -1,17 +1,21 @@
-from achelois.overwatch import settings
+from overwatch import settings, emit_signal, eband, emit_signal, connect_signal, MetaSignals, register_signal
+#from overwatch import settings, eband, MetaSignals, Signals
 from buffer import buffer_manager
 
 from datetime import datetime, timedelta
-from weakref import WeakKeyDictionary
+from weakref import WeakKeyDictionary, ref
+from threading import Thread
 
-from urwid import ListWalker, ListBox, WidgetWrap, MetaSuper, emit_signal, connect_signal, MetaSignals
+from urwid import ListWalker, ListBox, WidgetWrap, MetaSuper, Text, AttrWrap
 import xappy
 
+from lib.metautil import MetaMixin, ScrollMixin
 from achelois.databasics import thread_container
 from achelois.search_utils import get_threads, get_members
 from achelois.tools import filterNone
+from read_mode import read_box
 
-import threadmap
+from lib import threadmap, forkmap
 
 #from string import ascii_lowercase, digits, maketrans
 #anonitext = maketrans(ascii_lowercase + digits, 'x'*26 + '7'*len(digits))
@@ -19,38 +23,48 @@ import threadmap
 srchidx = 'xap.idx'
 
 class index_box(ListBox):
-    __slots__ = ()
+    __slots__ = ('_urwid_signals')
+    signals = ['modified']
+
     def __init__(self, query):
         w = index_walker(query)
         self.__super.__init__(w)
 
     def render(self, size, focus=False):
         maxcol, maxrow = size
-        if self.body._rows != (maxrow-2):
-            self.body._rows = (maxrow-2)
-        self.__super.render(size, focus)
+        if self.body._rows != maxrow:
+            self.body._rows = maxrow
+        return self.__super.render(size, focus)
 
-class index_walker(ListWalker):
-    __slots__ = ('focus', '_tids', '_query', 'container', '_wstorage', '_rows')
+class index_walker(ListWalker, MetaMixin):
+    __slots__ = ('focus', '_tids', '_query', 'container', '_wstorage', '_rows', '_urwid_signals')
+    signals = ['modified', 'keypress']
 
     def __hash__(self): return id(self)
 
     def __init__(self, query):
         self._tids = []
-        self._wstorage = {}
+        #self._wstorage = {}
         self._wstorage = WeakKeyDictionary()
         self._rows = 20
-        self.container = sigthread_container()
+        self.container = thread_container()
         self._query = query
         self.focus = 0
 
         self.more_threads()
 
+    def _modified(self):
+        if self.focus >= len(self.container):
+            self.focus = max(0, len(self.container)-1)
+            ListWalker._modified(self)
+            #emit_signal(self, 'modified')
+
     def get_focus(self):
         if len(self.container) == 0: return None, None
-        return self._get_widget(self.container[self.focus]), self.focus
+        w = self._get_widget(self.container[self.focus])
+        return w, self.focus
 
-    def set_focus(self):
+    def set_focus(self, position):
         assert type(position) is int
         self.focus = position
         self._modified()
@@ -58,33 +72,74 @@ class index_walker(ListWalker):
     def get_next(self, start_from):
         pos = start_from + 1
         if len(self.container) <= pos:
-            try: self.more_threads()
-            except: pass
-            if len(self.container) <= pos: return None, None
+            if len(self.container) != len(self._tids):
+                self._more_threads()
+                #thread = self.more_threads()
+                #thread.join()
+            elif self.chk_new():
+                self._more_threads()
+                #thread = self.more_threads()
+                #thread.join()
+            else: return None, None
+            return None, None
            
-        return self._get_widget(self.container[pos]), pos
+        w = self._get_widget(self.container[pos])
+        return w, pos
 
     def get_prev(self, start_from):
         pos = start_from - 1
         if pos < 0: return None, None
-        return self._get_widget(self.container[pos]), pos
+        w = self._get_widget(self.container[pos])
+        return w, pos
 
     def _get_widget(self, conv):
         w = self._wstorage.setdefault(conv, conv_widget())
-        if not hasattr(w, '_conv'): w._init(conv)
+        if not hasattr(w, '_conv'):
+            w._init(conv)
+            connect_signal(w, 'modified', self._modified)
+            connect_signal(w, 'keypress', self._keypress)
         return w
 
+    def _keypress(self, key):
+        if key == "r":
+            emit_signal(eband, 'log', str(len(self.container)))
+        elif key == "e":
+            self._more_threads()
+
     def more_threads(self):
+        thread = Thread(target=self._more_threads)
+        thread.start()
+        return thread
+
+    def _more_threads(self):
+        emit_signal(eband, 'log', 'running more_threads')
         cur = len(self.container)
+        emit_signal(eband, 'log', 'len container at start: %s' % str(cur))
         sconn = xappy.SearchConnection(srchidx)
         self._update_tids(sconn)
 
-        to_get = filter(lambda x: x in self.container._map, self._tids[:cur])
+        to_get = filter(lambda x: x not in self.container._map, self._tids[:cur])
         to_get = filterNone(set(to_get))
+        #emit_signal(eband, 'log', str(to_get))
         to_get.extend(self._tids[cur:(cur+self._rows-len(to_get))])
+        #emit_signal(eband, 'log', str(to_get))
 
         self._add_more_threads(sconn, to_get)
         
+        sconn.close()
+
+    def chk_new(self):
+        start_count = len(self._tids)
+        self._chk_new()
+        new_count = len(self._tids)
+        if start_count == new_count:
+            return False
+        else:
+            return True
+
+    def _chk_new(self):
+        sconn = xappy.SearchConnection(srchidx)
+        self._update_tids(sconn)
         sconn.close()
 
     def _update_tids(self, sconn):
@@ -92,21 +147,24 @@ class index_walker(ListWalker):
         self._tids = threads
 
     def _add_more_threads(self, sconn, tids):
+        emit_signal(eband, 'log', 'in _add_more_threads')
         to_join = get_members(sconn, tids)
+        emit_signal(eband, 'log', 'thread is now %s convs' % str(len(self.container)))
+        emit_signal(eband, 'log', 'got %s messages to thread' % str(len(to_join)))
         self.container.thread(to_join)
+        emit_signal(eband, 'log', 'thread is now %s convs' % str(len(self.container)))
         self._modified()
+        #if len(to_join): self._modified()
+        #return
 
-class conv_widget(WidgetWrap):
-    __slots__ = ('_conv', '_urwid_signals')
+class conv_widget(MetaMixin, ScrollMixin, WidgetWrap):
+    __slots__ = ('_conv')
+    #__slots__ = ('_conv', '_urwid_signals')
     signals = ['keypress', 'modified']
     ignore_focus = False
-    _selectable = True
+    context = 'index_mode'
     
-    def __init__(self): pass
-
-    def _init(self, conv):
-        connect_signal(conv, 'modified', self.update)
-        self._conv = conv
+    def __init__(self):
         txt = "Loading"
         w = Text(txt, wrap='clip')
         w = AttrWrap(w, 'index notfocus',
@@ -120,6 +178,15 @@ class conv_widget(WidgetWrap):
                      }
                     )
         self.__super.__init__(w)
+
+    def _init(self, conv):
+        conv._wcallback = ref(self.update)
+        #register_signal(conv, 'modified')
+        #connect_signal(conv, 'modified', self.update)
+        self._conv = conv
+        self.update()
+
+    def selectable(self): return True
 
     def idx_repr(self):
         def chk_new(x):
@@ -145,7 +212,7 @@ class conv_widget(WidgetWrap):
             else:
                 rep_date = ddate.strftime('%b %d')
 
-        ddate = ('new index', ' {0:>10}'.format(rep_date))
+        ddate = ('index new', ' {0:>10}'.format(rep_date))
 
         dsender = filter(chk_new, self._conv.messages)[:3]
         idx = None
@@ -162,34 +229,47 @@ class conv_widget(WidgetWrap):
         else:
             oldest_new = dsender[idx]
 
-        dsubject = ('%s index' % tstat, ' %s' % oldest_new.get('subject',[''])[0])
+        dsubject = ('index %s' % tstat, ' %s' % oldest_new.get('subject',[''])[0])
         dpreview = ('index sample', ' %s' % ' '.join(oldest_new.get('sample',[''])[0].split()))
 
         sendmarkup = []
         c=0
         w=25
+        break_early = False
         for x in dsender:
             if 'S' not in x.flags: stat = 'new'
             else: stat = 'read'
-            fname = ' %s,' % x.sender[0].split()[0].strip('"')
-            l=(len(fname)+2)
+            fname = x.sender[0].split()[0].strip('"')
+            if '@' in fname: fname = fname.split('@')[0]
+            fname = ' %s,' % fname
+            l=len(fname)
+            charsleft = (w-c)
             if (c+l) >= w:
-                charsleft = (w-c)
-                fname = fname[:charsleft].strip(',')
-            elif x == dsender[-1]:
                 fname = fname.strip(',')
+                fname = fname[:charsleft]
+                break_early = True
             c+=l
-            sendmarkup.append(('%s index' % stat, fname))
-            if c >= w: break
+            sendmarkup.append(('index %s' % stat, fname))
+            if break_early: break
 
-        dcontained = ('%s index' % tstat, ' {0!s:^5}'.format(len(self._conv.messages)))
-        dlabels = ('index label', ' +%s' % ' +'.join(self._conv.labels))
+        if not break_early:
+            last_sender = sendmarkup.pop()
+            attr, fname = last_sender
+            fname = fname.strip(',')
+            fname = fname.ljust(charsleft)
+            sendmarkup.append((attr, fname))
 
-        return (ddate, sendmarkup, dcontained, dsubject, dlabels, dpreview)
+        dcontained = ('index %s' % tstat, ' {0!s:^5}'.format(len(self._conv.messages)))
+        dlabels = ('index label', ' %s' % ' '.join(map(lambda x: '+%s' % x, self._conv.labels)))
+        if dlabels[1] == ' ':
+            dlabels = ' '
+
+        return [ddate, sendmarkup, dcontained, dsubject, dlabels, dpreview]
 
     def update(self):
         self.set_text( self.idx_repr() )
         self._invalidate()
+        emit_signal(self, 'modified')
 
     def set_text(self, markup):
         #def privatize_txt(x):
@@ -199,10 +279,25 @@ class conv_widget(WidgetWrap):
                     #        return (x[0], x[1].translate(anonitext))
         return self._w.original_widget.set_text(markup)
 
-    def keypress(self, (maxcol,), key):
-        if key not in (' ','enter'):
+    def do_activate(self, size, key):
+        try: buffer_manager.set_buffer(self._conv)
+        except TypeError:
+            buffer_manager.register_support(self._conv, read_box)
+            buffer_manager.set_buffer(self._conv)
+
+    def do_nomap(self, size, key):
+        return key
+
+    def _keypress(self, (maxcol,), key):
+        if key in ('r', 'e'):
+            emit_signal(self, 'keypress', key)
             return key
-        buffer_manager.set_buffer(self._conv)
+        elif key not in (' ','enter'):
+            return key
+        try: buffer_manager.set_buffer(self._conv)
+        except TypeError:
+            buffer_manager.register_support(self._conv, read_box)
+            buffer_manager.set_buffer(self._conv)
 
 class sigthread_container(thread_container):
     __slots__ = ()
@@ -210,4 +305,5 @@ class sigthread_container(thread_container):
     def join(self, conv):
         self.__super.join(conv)
         conv = self[conv.thread[0]]
-        emit_signal(conv, 'modified')
+        #Signals.emit(conv, 'modified')
+        #emit_signal(conv, 'modified')

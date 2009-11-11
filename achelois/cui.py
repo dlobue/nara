@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from overwatch import settings, MetaSignals, connect_signal, emit_signal, eband
+#from overwatch import settings, MetaSignals, eband, Signals
 
 import urwid.curses_display
 import urwid
@@ -11,6 +12,8 @@ from collections import deque
 import xappy
 
 from index_mode import index_box
+from read_mode import read_box
+from databasics import conv_container
 
 
 class info_log(urwid.ListBox): pass
@@ -26,10 +29,13 @@ class Screen(object):
 
     palette = [
             ('body', 'light gray', 'black'),
+            ('blank', 'light gray', 'black'),
             ('selected', 'white', 'black', ('bold')),
             ('focus', 'light blue', 'black', ('bold')),
             ('selected focus', 'light cyan', 'black', ('bold')),
             ('test', 'yellow', 'dark cyan'),
+            ('default attr', 'yellow', 'dark cyan'),
+            ('default focus', 'light magenta', 'dark cyan'),
             ('status', 'white', 'dark blue'),
             ('read headers', 'black', 'dark blue'),
             ('new headers', 'black', 'dark green', ('standout')),
@@ -55,6 +61,7 @@ class Screen(object):
             ]
     def __init__(self):
         connect_signal(eband, 'emergency', self.shutdown)
+        connect_signal(eband, 'log', self.addLine2)
 
     def shutdown(self):
         self.tui.stop()
@@ -71,6 +78,7 @@ class Screen(object):
 
     def redisplay(self):
         canvas = self.frame.render(self.size, focus=True)
+        if canvas is None: raise ValueError('canvas is None!!!!')
         self.tui.draw_screen(self.size, canvas)
 
     def set_buffer(self, buffer):
@@ -105,17 +113,18 @@ class Screen(object):
         qall = sconn.query_all()
         buffer_manager.register_support( qall, index_box)
         buffer_manager.register_support(self.lines2, info_log)
+        buffer_manager.register_support(conv_container, read_box)
 
         #self.listbox2 = buffer_manager.set_buffer(self.lines2)
         self.listbox2 = buffer_manager.get_buffer(self.lines2)
+        #self.listbox = buffer_manager.get_buffer(qall)
         self.listbox = buffer_manager.set_buffer(qall)
 
         #buffer_manager.register_noremove(self.listbox)
         #buffer_manager.register_noremove(self.listbox2)
 
+        self.redisplay()
 
-        self.redisplay()
-        self.redisplay()
 
         while 1:
             keys = self.tui.get_input()
@@ -124,8 +133,8 @@ class Screen(object):
                 break
 
             for key in keys:
-                if key in ('h','j','k','l','J','K'):
-                    key = keymap_alias[key]
+                #if key in ('h','j','k','l','J','K'):
+                    #key = keymap_alias[key]
 
                 #if key == 'x':
                     #buffer_manager.destroy()
@@ -141,7 +150,14 @@ class Screen(object):
                 elif key == 'B':
                     buffer_manager.set_prev()
                 elif key == 't':
-                    self.addLine2('%r %r' % self.listbox2.pack(self.size))
+                    #emit_signal(eband, 'log', 'hello world')
+                    #tids = get_threads(sconn, qall)
+                    #data = get_members(sconn, tids)
+                    c = 0
+                    #while c < 5:
+                        #self.addLine2(str(data.next().data))
+                        #c+=1
+                        
                     #val = dir(self.listbox2)
                     #[ self.addLine2('%s        %s' % (x, getattr(self.listbox2, x))) for x in val ]
                     #map(self.addLine2, getattr(self.listbox2, val))

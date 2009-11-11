@@ -77,7 +77,7 @@ class Screen(RealTerminal):
         self.set_input_timeouts()
         self.last_bstate = 0
         self._started = False
-    
+
     started = property(lambda self: self._started)
 
     def register_palette( self, l ):
@@ -89,7 +89,7 @@ class Screen(RealTerminal):
 
         calls self.register_palette_entry for each item in l
         """
-        
+
         for item in l:
             if len(item) in (3,4):
                 self.register_palette_entry( *item )
@@ -118,7 +118,7 @@ class Screen(RealTerminal):
         mono -- monochrome terminal attribute, one of: None (default),
             'bold',    'underline', 'standout', or a tuple containing
             a combination eg. ('bold','underline')
-            
+
         """
         assert not self._started
 
@@ -129,21 +129,21 @@ class Screen(RealTerminal):
         assert (mono is None or 
             mono in (None, 'bold', 'underline', 'standout') or
             type(mono)==type(()))
-    
+
         for i in range(len(self.curses_pairs)):
             pair = self.curses_pairs[i]
             if pair == (fg_a, bg_a): break
         else:
             i = len(self.curses_pairs)
             self.curses_pairs.append( (fg_a, bg_a) )
-        
+
         self.palette[name] = (i, fg_b, mono)
-        
-    
+
+
     def set_mouse_tracking(self):
         """
         Enable mouse tracking.  
-        
+
         After calling this function get_input will include mouse
         click events along with keystrokes.
         """
@@ -180,11 +180,11 @@ class Screen(RealTerminal):
         curses.meta(1)
         curses.halfdelay(10) # use set_input_timeouts to adjust
         self.s.keypad(0)
-        
+
         if not self._signal_keys_set:
             self._old_signal_keys = self.tty_signal_keys()
 
-    
+
     def stop(self):
         """
         Restore the screen.
@@ -197,19 +197,19 @@ class Screen(RealTerminal):
             curses.endwin()
         except _curses.error:
             pass # don't block original error with curses error
-        
+
         self._started = False
-        
+
         if self._old_signal_keys:
             self.tty_signal_keys(*self._old_signal_keys)
-    
+
     def run_wrapper(self,fn):
         """Call fn in fullscreen mode.  Return to normal on exit.
-        
+
         This function should be called to wrap your main program loop.
         Exception tracebacks will be displayed in normal mode.
         """
-    
+
         try:
             self.start()
             return fn()
@@ -217,12 +217,12 @@ class Screen(RealTerminal):
             self.stop()
 
     def _setup_colour_pairs(self):
-    
+
         k = 1
         if self.has_color:
             if len(self.curses_pairs) > curses.COLOR_PAIRS:
                 raise Exception("Too many colour pairs!  Use fewer combinations.")
-        
+
             for fg,bg in self.curses_pairs[1:]:
                 if not self.has_default_colors and fg == -1:
                     fg = _curses_colours["black"][0]
@@ -232,7 +232,7 @@ class Screen(RealTerminal):
                 k+=1
         else:
             wh, bl = curses.COLOR_WHITE, curses.COLOR_BLACK
-        
+
         self.attrconv = {}
         for name, (cp, a, mono) in self.palette.items():
             if self.has_color:
@@ -246,7 +246,7 @@ class Screen(RealTerminal):
             else:
                 attr = self._curses_attr(mono)
                 self.attrconv[name] = attr
-    
+
     def _curses_attr(self, a):
         if a == 'bold':
             return curses.A_BOLD
@@ -256,8 +256,8 @@ class Screen(RealTerminal):
             return curses.A_UNDERLINE
         else:
             return 0
-                
-                
+
+
 
 
     def _curs_set(self,x):
@@ -269,12 +269,12 @@ class Screen(RealTerminal):
         except _curses.error:
             self.cursor_state = "fixed"
 
-    
+
     def _clear(self):
         self.s.clear()
         self.s.refresh()
-    
-    
+
+
     def _getch(self, wait_tenths):
         if wait_tenths==0:
             return self._getch_nodelay()
@@ -284,7 +284,7 @@ class Screen(RealTerminal):
             curses.halfdelay(wait_tenths)
         self.s.nodelay(0)
         return self.s.getch()
-    
+
     def _getch_nodelay(self):
         self.s.nodelay(1)
         while 1:
@@ -294,7 +294,7 @@ class Screen(RealTerminal):
                 break
             except _curses.error:
                 pass
-            
+
         return self.s.getch()
 
     def set_input_timeouts(self, max_wait=None, complete_wait=0.1, 
@@ -304,7 +304,7 @@ class Screen(RealTerminal):
         of 0.1s, ie. any value between 0.15 and 0.05 will be treated as
         0.1 and any value less than 0.05 will be treated as 0.  The
         maximum timeout value for this module is 25.5 seconds.
-    
+
         max_wait -- amount of time in seconds to wait for input when
             there is no input pending, wait forever if None
         complete_wait -- amount of time in seconds to wait when
@@ -324,7 +324,7 @@ class Screen(RealTerminal):
         self.max_tenths = convert_to_tenths(max_wait)
         self.complete_tenths = convert_to_tenths(complete_wait)
         self.resize_tenths = convert_to_tenths(resize_wait)
-    
+
     def get_input(self, raw_keys=False):
         """Return pending input as a list.
 
@@ -338,7 +338,7 @@ class Screen(RealTerminal):
         If raw_keys is False (default) this function will return a list
         of keys pressed.  If raw_keys is True this function will return
         a ( keys pressed, raw keycodes ) tuple instead.
-        
+
         Examples of keys returned
         -------------------------
         ASCII printable characters:  " ", "a", "0", "A", "-", "/" 
@@ -346,7 +346,7 @@ class Screen(RealTerminal):
         Escape sequences:  "up", "page up", "home", "insert", "f1"
         Key combinations:  "shift f1", "meta a", "ctrl b"
         Window events:  "window resize"
-        
+
         When a narrow encoding is not enabled
         "Extended ASCII" characters:  "\\xa1", "\\xb2", "\\xfe"
 
@@ -364,9 +364,9 @@ class Screen(RealTerminal):
                               ('ctrl mouse release', 0, 17, 23)
         """
         assert self._started
-        
+
         keys, raw = self._get_input( self.max_tenths )
-        
+
         # Avoid pegging CPU at 100% when slowly resizing, and work
         # around a bug with some braindead curses implementations that 
         # return "no key" between "window resize" commands 
@@ -383,30 +383,30 @@ class Screen(RealTerminal):
             if keys[-1:]!=['window resize']:
                 keys.append('window resize')
 
-                
+
         if keys==['window resize']:
             self.prev_input_resize = 2
         elif self.prev_input_resize == 2 and not keys:
             self.prev_input_resize = 1
         else:
             self.prev_input_resize = 0
-        
+
         if raw_keys:
             return keys, raw
         return keys
-        
-        
+
+
     def _get_input(self, wait_tenths):
         # this works around a strange curses bug with window resizing 
         # not being reported correctly with repeated calls to this
         # function without a doupdate call in between
         curses.doupdate() 
-        
+
         key = self._getch(wait_tenths)
         resize = False
         raw = []
         keys = []
-        
+
         while key >= 0:
             raw.append(key)
             if key==KEY_RESIZE: 
@@ -418,7 +418,7 @@ class Screen(RealTerminal):
             key = self._getch_nodelay()
 
         processed = []
-        
+
         try:
             while keys:
                 run, keys = escape.process_keyqueue(keys, True)
@@ -442,23 +442,23 @@ class Screen(RealTerminal):
             processed.append('window resize')
 
         return processed, raw
-        
-        
+
+
     def _encode_mouse_event(self):
         # convert to escape sequence
         last = next = self.last_bstate
         (id,x,y,z,bstate) = curses.getmouse()
-        
+
         mod = 0
         if bstate & curses.BUTTON_SHIFT:    mod |= 4
         if bstate & curses.BUTTON_ALT:        mod |= 8
         if bstate & curses.BUTTON_CTRL:        mod |= 16
-        
+
         l = []
         def append_button( b ):
             b |= mod
             l.extend([ 27, ord('['), ord('M'), b+32, x+33, y+33 ])
-        
+
         if bstate & curses.BUTTON1_PRESSED and last & 1 == 0:
             append_button( 0 )
             next |= 1
@@ -483,10 +483,10 @@ class Screen(RealTerminal):
         if bstate & curses.BUTTON4_RELEASED and last & 8:
             append_button( 64 + escape.MOUSE_RELEASE_FLAG )
             next &= ~ 8
-        
+
         self.last_bstate = next
         return l
-            
+
 
     def _dbg_instr(self): # messy input string (intended for debugging)
         curses.echo()
@@ -495,17 +495,17 @@ class Screen(RealTerminal):
         str = self.s.getstr()
         curses.noecho()
         return str
-        
+
     def _dbg_out(self,str): # messy output function (intended for debugging)
         self.s.clrtoeol()
         self.s.addstr(str)
         self.s.refresh()
         self._curs_set(1)
-        
+
     def _dbg_query(self,question): # messy query (intended for debugging)
         self._dbg_out(question)
         return self._dbg_instr()
-    
+
     def _dbg_refresh(self):
         self.s.refresh()
 
@@ -515,7 +515,7 @@ class Screen(RealTerminal):
         """Return the terminal dimensions (num columns, num rows)."""
         rows,cols = self.s.getmaxyx()
         return cols,rows
-        
+
 
     def _setattr(self, a):
         if a is None:
@@ -524,15 +524,15 @@ class Screen(RealTerminal):
         if not self.attrconv.has_key(a):
             raise Exception, "Attribute %s not registered!"%`a`
         self.s.attrset( self.attrconv[a] )
-                
-            
-            
+
+
+
     def draw_screen(self, (cols, rows), r ):
         """Paint screen with rendered canvas."""
         assert self._started
-        
+
         assert r.rows() == rows, "canvas size and passed size don't match"
-    
+
         y = -1
         for row in r.content():
             y += 1
@@ -542,7 +542,7 @@ class Screen(RealTerminal):
                 # terminal shrunk? 
                 # move failed so stop rendering.
                 return
-            
+
             first = True
             lasta = None
             nr = 0
@@ -579,7 +579,7 @@ class Screen(RealTerminal):
         else:
             self._curs_set(0)
             self.s.move(0,0)
-        
+
         self.s.refresh()
         self.keep_cache_alive_link = r
 
@@ -606,7 +606,7 @@ class _test:
                 (c+" on light gray",c,'light gray', 'standout'),
                 ])
         self.ui.run_wrapper(self.run)
-        
+
     def run(self):
         class FakeRender: pass
         r = FakeRender()
@@ -614,12 +614,12 @@ class _test:
         attr = [[],[]]
         r.coords = {}
         r.cursor = None
-        
+
         for c in self.l:
             t = ""
             a = []
             for p in c+" on black",c+" on dark blue",c+" on light gray":
-                
+
                 a.append((p,27))
                 t=t+ (p+27*" ")[:27]
             text.append( t )
@@ -645,13 +645,13 @@ class _test:
                 t += "'"+k + "' "
                 a += [(None,1), ('yellow on dark blue',len(k)),
                     (None,2)]
-            
+
             text.append(t + ": "+ `raw`)
             attr.append(a)
             text = text[-rows:]
             attr = attr[-rows:]
-                
-                
+
+
 
 
 if '__main__'==__name__:

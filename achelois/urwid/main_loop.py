@@ -57,7 +57,7 @@ class MainLoop(object):
 
         This is a standard main loop implementation with a single
         screen. 
-        
+
         The widget passed must be a box widget.
 
         raw_display.Screen is the only screen type that currently
@@ -67,7 +67,7 @@ class MainLoop(object):
         """
         self.widget = widget
         self.handle_mouse = handle_mouse
-        
+
         if not screen:
             import raw_display
             screen = raw_display.Screen()
@@ -127,19 +127,19 @@ class MainLoop(object):
     def remove_alarm(self, handle):
         """
         Remove an alarm. 
-        
+
         Return True if the handle was found, False otherwise.
         """
         return self.event_loop.remove_alarm(handle)
 
 
-    
+
     def run(self):
         """
         Start the main loop handling input events and updating 
         the screen.  The loop will continue until an ExitMainLoop 
         exception is raised.  
-        
+
         This function will call screen.run_wrapper() if screen.start() 
         has not already been called.
 
@@ -170,7 +170,7 @@ class MainLoop(object):
                 self.screen.run_wrapper(self._run)
         except ExitMainLoop:
             pass
-    
+
     def _run(self):
         if self.handle_mouse:
             self.screen.set_mouse_tracking()
@@ -221,7 +221,7 @@ class MainLoop(object):
         self._input_timeout = None
 
         max_wait, keys, raw = self.screen.get_input_nonblocking()
-        
+
         if max_wait is not None:
             # if get_input_nonblocking wants to be called back
             # make sure it happens with an alarm
@@ -267,22 +267,22 @@ class MainLoop(object):
                         break
 
             keys = self.input_filter(keys, raw)
-            
+
             if keys:
                 self.process_input(keys)
-            
+
             while next_alarm:
                 sec = next_alarm[0] - time.time()
                 if sec > 0:
                     break
                 tm, callback, user_data = next_alarm
                 callback(self, user_data)
-                
+
                 if self._alarms:
                     next_alarm = heapq.heappop(self.event_loop._alarms)
                 else:
                     next_alarm = None
-            
+
             if 'window resize' in keys:
                 self.screen_size = None
 
@@ -294,7 +294,7 @@ class MainLoop(object):
         called to simulate input from the user.
 
         keys -- list of input returned from self.screen.get_input()
-        
+
         >>> w = _refl("widget")
         >>> w.selectable_rval = True
         >>> scr = _refl("screen")
@@ -363,7 +363,7 @@ class MainLoop(object):
 
 
 
-        
+
 
 
 class SelectEventLoop(object):
@@ -502,7 +502,7 @@ class SelectEventLoop(object):
                         raise
         except ExitMainLoop:
             pass
-        
+
 
     def _loop(self):
         fds = self._watch_files.keys()
@@ -629,7 +629,7 @@ class GLibEventLoop(object):
         """
         Start the event loop.  Exit the loop when any callback raises
         an exception.  If ExitMainLoop is raised, exit cleanly.
-        
+
         >>> import os
         >>> rd, wr = os.pipe()
         >>> os.write(wr, "data") # something to read from rd
@@ -714,7 +714,7 @@ def twisted_main_loop(topmost_widget, palette=[], screen=None,
     from twisted.internet.defer import Deferred
     from twisted.python.failure import Failure
     from twisted.internet.abstract import FileDescriptor
-    
+
     class InputDescriptor(FileDescriptor):
         def __init__(self, fd, cb):
             self._fileno = fd

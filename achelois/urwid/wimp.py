@@ -25,6 +25,7 @@ from command_map import command_map
 
 
 class SelectableIcon(Text):
+    __slots__ = ('_cursor_position')
     _selectable = True
     def __init__(self, text, cursor_position=1):
         """
@@ -37,7 +38,7 @@ class SelectableIcon(Text):
         """
         self.__super.__init__(text)
         self._cursor_position = cursor_position
-    
+
     def render(self, size, focus=False):
         """
         Render the text content of this widget with a cursor when
@@ -60,7 +61,7 @@ class SelectableIcon(Text):
             c = CompositeCanvas(c)
             c.cursor = self.get_cursor_coords(size)
         return c
-    
+
     def get_cursor_coords(self, size):
         """
         Return the position of the cursor if visible.  This method
@@ -86,6 +87,7 @@ class CheckBoxError(Exception):
     pass
 
 class CheckBox(WidgetWrap):
+    __slots__ = ('_label', '_state', 'has_mixed')
     states = { 
         True: SelectableIcon("[X]"),
         False: SelectableIcon("[ ]"),
@@ -96,7 +98,7 @@ class CheckBox(WidgetWrap):
     # sent when the state of this widget is modified
     # (this variable is picked up by the MetaSignals metaclass)
     signals = ["change"]
-    
+
     def __init__(self, label, state=False, has_mixed=False,
              on_state_change=None, user_data=None):
         """
@@ -105,7 +107,7 @@ class CheckBox(WidgetWrap):
         has_mixed -- True if "mixed" is a state to cycle through
         on_state_change, user_data -- shorthand for connect_signal()
             function call for a single callback
-        
+
         Signals supported: 'change'
         Register signal handler with:
           connect_signal(check_box, 'change', callback [,user_data])
@@ -133,15 +135,15 @@ class CheckBox(WidgetWrap):
             connect_signal(self, 'change', on_state_change, user_data)
         self.set_label(label)
         self.set_state(state)
-    
+
     def _repr_words(self):
         return self.__super._repr_words() + [
             repr(self.label)]
-    
+
     def _repr_attrs(self):
         return dict(self.__super._repr_attrs(),
             state=self.state)
-    
+
     def set_label(self, label):
         """
         Change the check box label.
@@ -159,7 +161,7 @@ class CheckBox(WidgetWrap):
         self._label.set_text(label)
         # no need to call self._invalidate(). WidgetWrap takes care of
         # that when self.w changes
-    
+
     def get_label(self):
         """
         Return label text.
@@ -175,14 +177,14 @@ class CheckBox(WidgetWrap):
         """
         return self._label.text
     label = property(get_label)
-    
+
     def set_state(self, state, do_callback=True):
         """
         Set the CheckBox state.
 
         state -- True, False or "mixed"
         do_callback -- False to supress signal from this change
-        
+
         >>> changes = []
         >>> def callback_a(cb, state, user_data): 
         ...     changes.append("A %r %r" % (state, user_data))
@@ -222,12 +224,12 @@ class CheckBox(WidgetWrap):
             ('fixed', self.reserve_columns, self.states[state] ),
             self._label ] )
         self._w.focus_col = 0
-        
+
     def get_state(self):
         """Return the state of the checkbox."""
         return self._state
     state = property(get_state, set_state)
-        
+
     def keypress(self, size, key):
         """
         Toggle state on 'activate' command.  
@@ -247,13 +249,13 @@ class CheckBox(WidgetWrap):
         """
         if command_map[key] != 'activate':
             return key
-        
+
         self.toggle_state()
-        
+
     def toggle_state(self):
         """
         Cycle to the next valid state.
-        
+
         >>> cb = CheckBox("3-state", has_mixed=True)
         >>> cb.state
         False
@@ -280,7 +282,7 @@ class CheckBox(WidgetWrap):
     def mouse_event(self, size, event, button, x, y, focus):
         """
         Toggle state on button 1 press.
-        
+
         >>> size = (20,)
         >>> cb = CheckBox("clickme")
         >>> cb.state
@@ -294,9 +296,10 @@ class CheckBox(WidgetWrap):
             return False
         self.toggle_state()
         return True
-    
-        
+
+
 class RadioButton(CheckBox):
+    __slots__ = ('group')
     states = { 
         True: SelectableIcon("(X)"),
         False: SelectableIcon("( )"),
@@ -314,7 +317,7 @@ class RadioButton(CheckBox):
 
         This function will append the new radio button to group.
         "first True" will set to True if group is empty.
-        
+
         Signals supported: 'change'
         Register signal handler with:
           connect_signal(radio_button, 'change', callback [,user_data])
@@ -336,14 +339,14 @@ class RadioButton(CheckBox):
         """
         if state=="first True":
             state = not group
-        
+
         self.group = group
         self.__super.__init__(label, state, False, on_state_change, 
             user_data)
         group.append(self)
-    
 
-    
+
+
     def set_state(self, state, do_callback=True):
         """
         Set the RadioButton state.
@@ -387,12 +390,12 @@ class RadioButton(CheckBox):
             if cb is self: continue
             if cb._state:
                 cb.set_state(False)
-    
-    
+
+
     def toggle_state(self):
         """
         Set state to True.
-        
+
         >>> bgroup = [] # button group
         >>> b1 = RadioButton(bgroup, "Agree")
         >>> b2 = RadioButton(bgroup, "Disagree")
@@ -407,20 +410,21 @@ class RadioButton(CheckBox):
         """
         self.set_state(True)
 
-            
+
 
 class Button(WidgetWrap):
+    __slots__ = ('_label')
     button_left = Text("<")
     button_right = Text(">")
 
     signals = ["click"]
-    
+
     def __init__(self, label, on_press=None, user_data=None):
         """
         label -- markup for button label
         on_press, user_data -- shorthand for connect_signal()
             function call for a single callback
-        
+
         Signals supported: 'click'
         Register signal handler with:
           connect_signal(button, 'click', callback [,user_data])
@@ -441,14 +445,14 @@ class Button(WidgetWrap):
             ('fixed', 1, self.button_right)],
             dividechars=1)
         self.__super.__init__(cols) 
-        
+
         # The old way of listening for a change was to pass the callback
         # in to the constructor.  Just convert it to the new way:
         if on_press:
             connect_signal(self, 'click', on_press, user_data)
 
         self.set_label(label)
-    
+
     def _repr_words(self):
         # include button.label in repr(button)
         return self.__super._repr_words() + [
@@ -466,7 +470,7 @@ class Button(WidgetWrap):
         <Button selectable widget 'Yup yup'>
         """
         self._label.set_text(label)
-    
+
     def get_label(self):
         """
         Return label text.
@@ -479,11 +483,11 @@ class Button(WidgetWrap):
         """
         return self._label.text
     label = property(get_label)
-    
+
     def keypress(self, size, key):
         """
         Send 'click' signal on 'activate' command.
-        
+
         >>> assert command_map[' '] == 'activate'
         >>> assert command_map['enter'] == 'activate'
         >>> size = (15,)
@@ -521,7 +525,7 @@ class Button(WidgetWrap):
         """
         if button != 1 or not is_mouse_press(event):
             return False
-            
+
         self._emit('click')
         return True
 

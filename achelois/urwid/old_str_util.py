@@ -157,7 +157,7 @@ def calc_text_pos( text, start_offs, end_offs, pref_col ):
     Calculate the closest position to the screen column pref_col in text
     where start_offs is the offset into text assumed to be screen column 0
     and end_offs is the end of the range to search.
-    
+
     Returns (position, actual_col).
     """
     assert start_offs <= end_offs, `start_offs, end_offs`
@@ -210,7 +210,7 @@ def calc_width( text, start_offs, end_offs ):
         return sc
     # "wide" and "narrow"
     return end_offs - start_offs
-    
+
 def is_wide_char( text, offs ):
     """
     Test if the character at offs within text is wide.
@@ -264,7 +264,7 @@ def move_next_char( text, start_offs, end_offs ):
 
 def within_double_byte(str, line_start, pos):
     """Return whether pos is within a double-byte encoded character.
-    
+
     str -- string in question
     line_start -- offset of beginning of line (< pos)
     pos -- offset in question
@@ -279,7 +279,7 @@ def within_double_byte(str, line_start, pos):
     if v >= 0x40 and v < 0x7f:
         # might be second half of big5, uhc or gbk encoding
         if pos == line_start: return 0
-        
+
         if ord(str[pos-1]) >= 0x81:
             if within_double_byte(str, line_start, pos-1) == 1:
                 return 2
@@ -292,7 +292,7 @@ def within_double_byte(str, line_start, pos):
         if ord(str[i]) < 0x80:
             break
         i -= 1
-    
+
     if (pos - i) & 1:
         return 1
     return 2
@@ -324,7 +324,7 @@ def process_east_asian_width():
         if last is None:
             out.append((0, l))
             last = l
-        
+
         if last == l:
             out[-1] = (num, l)
         else:
@@ -335,7 +335,7 @@ def process_east_asian_width():
     for o in out[1:]:  # treat control characters same as ascii
         print "\t"+`o`+","
     print "]"
-        
+
 if __name__ == "__main__":
     process_east_asian_width()
 

@@ -76,7 +76,7 @@ def set_encoding( encoding ):
 
     if encoding in ( 'utf-8', 'utf8', 'utf' ):
         str_util.set_byte_encoding("utf8")
-            
+
         _use_dec_special = False
     elif encoding in ( 'euc-jp' # JISX 0208 only
             , 'euc-kr', 'euc-cn', 'euc-tw' # CNS 11643 plain 1 only
@@ -84,7 +84,7 @@ def set_encoding( encoding ):
             # these shouldn't happen, should they?
             , 'eucjp', 'euckr', 'euccn', 'euctw', 'cncb' ):
         str_util.set_byte_encoding("wide")
-            
+
         _use_dec_special = True
     else:
         str_util.set_byte_encoding("narrow")
@@ -121,7 +121,7 @@ def apply_target_encoding( s ):
             for c, alt in zip(escape.DEC_SPECIAL_CHARS, 
                     escape.ALT_DEC_SPECIAL_CHARS):
                 s = s.replace( c, escape.SO+alt+escape.SI )
-    
+
     if type(s) == type(u""):
         s = s.replace( escape.SI+escape.SO, u"" ) # remove redundant shifts
         s = s.encode( _target_encoding )
@@ -134,10 +134,10 @@ def apply_target_encoding( s ):
     if sis0:
         sout.append( sis0 )
         cout.append( (None,len(sis0)) )
-    
+
     if len(sis)==1:
         return sis0, cout
-    
+
     for sn in sis[1:]:
         sl = sn.split( escape.SI, 1 ) 
         if len(sl) == 1:
@@ -153,10 +153,10 @@ def apply_target_encoding( s ):
         if son:
             sout.append(son)
             rle_append_modify(cout, (None, len(son)))
-    
+
     return "".join(sout), cout
-    
-    
+
+
 ######################################################################
 # Try to set the encoding using the one detected by the locale module
 set_encoding( detected_encoding )
@@ -222,10 +222,10 @@ def trim_text_attr_cs( text, attr, cs, start_col, end_col ):
         al = rle_get_at( attr, epos )
         rle_append_modify( attrtr, (al, 1) )
         rle_append_modify( cstr, (None, 1) )
-    
+
     return " "*pad_left + text[spos:epos] + " "*pad_right, attrtr, cstr
-    
-        
+
+
 def rle_get_at( rle, pos ):
     """
     Return the attribute at offset pos.
@@ -267,7 +267,7 @@ def rle_len( rle ):
     Return the number of characters covered by a run length
     encoded attribute list.
     """
-    
+
     run = 0
     for v in rle:
         assert type(v) == type(()), `rle`
@@ -290,13 +290,13 @@ def rle_append_beginning_modify( rle, (a, r) ):
             rle[0] = (a,run+r)
         else:
             rle[0:0] = [(al, r)]
-            
-            
+
+
 def rle_append_modify( rle, (a, r) ):
     """
     Append (a,r) to the rle list rle.
     Merge with last run when possible.
-    
+
     MODIFIES rle parameter contents. Returns None.
     """
     if not rle or rle[-1][0] != a:
@@ -316,7 +316,7 @@ def rle_join_modify( rle, rle2 ):
         return
     rle_append_modify(rle, rle2[0])
     rle += rle2[1:]
-        
+
 def rle_product( rle1, rle2 ):
     """
     Merge the runs of rle1 and rle2 like this:
@@ -331,7 +331,7 @@ def rle_product( rle1, rle2 ):
     if not rle1 or not rle2: return []
     a1, r1 = rle1[0]
     a2, r2 = rle2[0]
-    
+
     l = []
     while r1 and r2:
         r = min(r1, r2)
@@ -363,21 +363,21 @@ class TagMarkupException( Exception ): pass
 
 def decompose_tagmarkup( tm ):
     """Return (text string, attribute list) for tagmarkup passed."""
-    
+
     tl, al = _tagmarkup_recurse( tm, None )
     text = "".join(tl)
-    
+
     if al and al[-1][0] is None:
         del al[-1]
-        
+
     return text, al
-    
+
 def _tagmarkup_recurse( tm, attr ):
     """Return (text list, attribute list) for tagmarkup passed.
-    
+
     tm -- tagmarkup
     attr -- current attribute or None"""
-    
+
     if type(tm) == list:
         # for lists recurse to process each subelement
         rtl = [] 
@@ -394,7 +394,7 @@ def _tagmarkup_recurse( tm, attr ):
             rtl += tl
             ral += al
         return rtl, ral
-        
+
     if type(tm) == type(()):
         # tuples mark a new attribute boundary
         if len(tm) != 2: 
@@ -402,14 +402,14 @@ def _tagmarkup_recurse( tm, attr ):
 
         attr, element = tm
         return _tagmarkup_recurse( element, attr )
-    
+
     if type(tm) not in (str, unicode):
         # last ditch, try converting the object to unicode
         try:
             tm = uncode(tm)
         except:
             raise TagMarkupException, "Invalid markup element: %r" % tm
-    
+
     # text
     return [tm], [(attr, len(tm))]
 
@@ -432,7 +432,7 @@ class MetaSuper(type):
         setattr(cls, "_%s__super" % name, super(cls))
 
 
-    
+
 def int_scale(val, val_range, out_range):
     """
     Scale val in the range [0, val_range-1] to an integer in the range 

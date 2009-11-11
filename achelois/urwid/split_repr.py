@@ -55,14 +55,14 @@ def split_repr(self):
     return "<%s %s>" % (self.__class__.__name__,
         " ".join(words) +
         " ".join(["%s=%r" % (k,v) for k,v in alist]))
-    
-    
+
+
 def remove_defaults(d, fn):
     """
     Remove keys in d that are set to the default values from
     fn.  This method is used to unclutter the _repr_attrs() 
     return value.
-    
+
     d will be modified by this function.
 
     Returns d.

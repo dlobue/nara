@@ -33,14 +33,14 @@ class ListWalkerError(Exception):
 
 class ListWalker(object):
     __metaclass__ = signals.MetaSignals
-    
+
     signals = ["modified"]
 
     def __hash__(self): return id(self)
 
     def _modified(self):
         signals.emit_signal(self, "modified")
-    
+
 
 class PollingListWalker(object):  # NOT ListWalker subclass
     def __init__(self, contents):
@@ -52,11 +52,11 @@ class PollingListWalker(object):  # NOT ListWalker subclass
             contents, '__getitem__' ):
             raise ListWalkerError, "SimpleListWalker expecting list like object, got: "+`contents`
         self.focus = 0
-    
+
     def _clamp_focus(self):
         if self.focus >= len(self.contents):
             self.focus = len(self.contents)-1
-    
+
     def get_focus(self):
         """Return (focus widget, focus position)."""
         if len(self.contents) == 0: return None, None
@@ -100,7 +100,7 @@ class SimpleListWalker(MonitoredList, ListWalker):
         self.focus = 0
 
     def __hash__(self): return id(self)
-    
+
     def _get_contents(self):
         """
         Return self.
@@ -114,17 +114,17 @@ class SimpleListWalker(MonitoredList, ListWalker):
         if self.focus >= len(self):
             self.focus = max(0, len(self)-1)
         ListWalker._modified(self)
-    
+
     def set_modified_callback(self, callback):
         """
         This function inherited from MonitoredList is not 
         implemented in SimleListWalker.
-        
+
         Use connect_signal(list_walker, "modified", ...) instead.
         """
         raise NotImplementedError('Use connect_signal('
             'list_walker, "modified", ...) instead.')
-    
+
     def get_focus(self):
         """Return (focus widget, focus position)."""
         if len(self) == 0: return None, None
@@ -151,7 +151,7 @@ class SimpleListWalker(MonitoredList, ListWalker):
         pos = start_from - 1
         if pos < 0: return None, None
         return self[pos],pos
-        
+
 
 class ListBoxError(Exception):
     pass
@@ -190,11 +190,11 @@ class ListBox(BoxWidget):
 
         # variable for delayed focus change used by set_focus
         self.set_focus_pending = 'first selectable'
-        
+
         # variable for delayed valign change used by set_focus_valign
         self.set_focus_valign_pending = None
-        
-    
+
+
     def calculate_visible(self, size, focus=False ):
         """ Return (middle,top,bottom) or None,None,None.
 
@@ -219,32 +219,32 @@ class ListBox(BoxWidget):
         if focus_widget is None: #list box is empty?
             return None,None,None
         top_pos = bottom_pos = focus_pos
-        
+
         offset_rows, inset_rows = self.get_focus_offset_inset(
             (maxcol,maxrow))
         #    force at least one line of focus to be visible
         if maxrow and offset_rows >= maxrow:
             offset_rows = maxrow -1
-        
+
         #    adjust position so cursor remains visible
         cursor = None
         if maxrow and focus_widget.selectable() and focus:
             if hasattr(focus_widget,'get_cursor_coords'):
                 cursor=focus_widget.get_cursor_coords((maxcol,))
-        
+
         if cursor is not None:
             cx, cy = cursor
             effective_cy = cy + offset_rows - inset_rows
-            
+
             if effective_cy < 0: # cursor above top?
                 inset_rows = cy
             elif effective_cy >= maxrow: # cursor below bottom?
                 offset_rows = maxrow - cy -1
-        
+
         #    set trim_top by focus trimmimg
         trim_top = inset_rows
         focus_rows = focus_widget.rows((maxcol,),True)
-        
+
         # 2. collect the widgets above the focus
         pos = focus_pos
         fill_lines = offset_rows
@@ -263,7 +263,7 @@ class ListBox(BoxWidget):
                 trim_top = p_rows-fill_lines
                 break
             fill_lines -= p_rows
-        
+
         trim_bottom = focus_rows + offset_rows - inset_rows - maxrow
         if trim_bottom < 0: trim_bottom = 0
 
@@ -276,7 +276,7 @@ class ListBox(BoxWidget):
             if next is None: # run out of widgets below?
                 break
             bottom_pos = pos
-                
+
             n_rows = next.rows( (maxcol,) )
             fill_below.append( (next, pos, n_rows) )
             if n_rows > fill_lines: # crosses bottom edge?
@@ -287,7 +287,7 @@ class ListBox(BoxWidget):
 
         # 4. fill from top again if necessary & possible
         fill_lines = max(0, fill_lines)
-        
+
         if fill_lines >0 and trim_top >0:
             if fill_lines <= trim_top:
                 trim_top -= fill_lines
@@ -311,13 +311,13 @@ class ListBox(BoxWidget):
                 break
             fill_lines -= p_rows
             offset_rows += p_rows
-        
+
         # 5. return the interesting bits
         return ((offset_rows - inset_rows, focus_widget, 
                 focus_pos, focus_rows, cursor ),
             (trim_top, fill_above), (trim_bottom, fill_below))
 
-    
+
     def render(self, size, focus=False ):
         """
         Render listbox and return canvas.
@@ -328,7 +328,7 @@ class ListBox(BoxWidget):
             (maxcol, maxrow), focus=focus)
         if middle is None:
             return SolidCanvas(" ", maxcol, maxrow)
-        
+
         _ignore, focus_widget, focus_pos, focus_rows, cursor = middle
         trim_top, fill_above = top
         trim_bottom, fill_below = bottom
@@ -342,7 +342,7 @@ class ListBox(BoxWidget):
                 raise ListBoxError, "Widget %s at position %s within listbox calculated %d rows but rendered %d!"% (`widget`,`w_pos`,w_rows, canvas.rows())
             rows += w_rows
             combinelist.append((canvas, w_pos, False))
-        
+
         focus_canvas = focus_widget.render((maxcol,), focus=focus)
 
         if focus_canvas.rows() != focus_rows:
@@ -350,28 +350,28 @@ class ListBox(BoxWidget):
         c_cursor = focus_canvas.cursor
         if cursor != c_cursor:
             raise ListBoxError, "Focus Widget %s at position %s within listbox calculated cursor coords %s but rendered cursor coords %s!" %(`focus_widget`,`focus_pos`,`cursor`,`c_cursor`)
-            
+
         rows += focus_rows
         combinelist.append((focus_canvas, focus_pos, True))
-        
+
         for widget,w_pos,w_rows in fill_below:
             canvas = widget.render((maxcol,))
             if w_rows != canvas.rows():
                 raise ListBoxError, "Widget %s at position %s within listbox calculated %d rows but rendered %d!"% (`widget`,`w_pos`,w_rows, canvas.rows())
             rows += w_rows
             combinelist.append((canvas, w_pos, False))
-        
+
         final_canvas = CanvasCombine(combinelist)
-        
+
         if trim_top:    
             final_canvas.trim(trim_top)
             rows -= trim_top
         if trim_bottom:    
             final_canvas.trim_end(trim_bottom)
             rows -= trim_bottom
-        
+
         assert rows <= maxrow, "Listbox contents too long!  Probably urwid's fault (please report): %s" % `top,middle,bottom`
-        
+
         if rows < maxrow:
             bottom_pos = focus_pos
             if fill_below: bottom_pos = fill_below[-1][1]
@@ -404,7 +404,7 @@ class ListBox(BoxWidget):
         """
         assert coming_from in ('above', 'below', None)
         focus_widget, focus_pos = self.body.get_focus()
-        
+
         self.set_focus_pending = coming_from, focus_widget, focus_pos
         self.body.set_focus( position )
 
@@ -427,13 +427,13 @@ class ListBox(BoxWidget):
         focus_widget, focus_pos = self.body.get_focus()
         if focus_widget is None:
             return
-        
+
         rows = focus_widget.rows((maxcol,), focus)
         rtop, rbot = calculate_filler( vt, va, 'fixed', rows, 
             None, maxrow )
 
         self.shift_focus((maxcol, maxrow), rtop)
-        
+
     def _set_focus_first_selectable(self, size, focus):
         """
         Choose the first visible, selectable widget below the
@@ -446,7 +446,7 @@ class ListBox(BoxWidget):
             (maxcol, maxrow), focus=focus)
         if middle is None:
             return
-        
+
         row_offset, focus_widget, focus_pos, focus_rows, cursor = middle
         trim_top, fill_above = top
         trim_bottom, fill_below = bottom
@@ -479,21 +479,21 @@ class ListBox(BoxWidget):
                 (maxcol,maxrow), focus)
         coming_from, focus_widget, focus_pos = self.set_focus_pending
         self.set_focus_pending = None
-        
+
         # new position
         new_focus_widget, position = self.body.get_focus()
         if focus_pos == position:
             # do nothing
             return
-            
+
         # restore old focus temporarily
         self.body.set_focus(focus_pos)
-                
+
         middle,top,bottom=self.calculate_visible((maxcol,maxrow),focus)
         focus_offset, focus_widget, focus_pos, focus_rows, cursor=middle
         trim_top, fill_above = top
         trim_bottom, fill_below = bottom
-        
+
         offset = focus_offset
         for widget, pos, rows in fill_above:
             offset -= rows
@@ -522,11 +522,11 @@ class ListBox(BoxWidget):
         else:
             offset = (maxrow-rows)/2
         self.shift_focus((maxcol, maxrow), offset)
-    
+
 
     def shift_focus(self, size, offset_inset):
         """Move the location of the current focus relative to the top.
-        
+
         offset_inset -- either the number of rows between the 
           top of the listbox and the start of the focus widget (+ve
           value) or the number of lines of the focus widget hidden off 
@@ -535,7 +535,7 @@ class ListBox(BoxWidget):
           listbox
         """
         (maxcol, maxrow) = size
-        
+
         if offset_inset >= 0:
             if offset_inset >= maxrow:
                 raise ListBoxError, "Invalid offset_inset: %s, only %s rows in list box"% (`offset_inset`, `maxrow`)
@@ -549,11 +549,11 @@ class ListBox(BoxWidget):
             self.offset_rows = 0
             self.inset_fraction = (-offset_inset,tgt_rows)
         self._invalidate()
-                
+
     def update_pref_col_from_focus(self, size):
         """Update self.pref_col from the focus widget."""
         (maxcol, maxrow) = size
-        
+
         widget, old_pos = self.body.get_focus()
         if widget is None: return
 
@@ -572,7 +572,7 @@ class ListBox(BoxWidget):
             offset_inset = 0, coming_from = None, 
             cursor_coords = None, snap_rows = None):
         """Change the current focus widget.
-        
+
         position -- a position compatible with self.body.set_focus
         offset_inset_rows -- either the number of rows between the 
           top of the listbox and the start of the focus widget (+ve
@@ -588,7 +588,7 @@ class ListBox(BoxWidget):
           when trying to "snap" a selectable focus into the view
         """
         (maxcol, maxrow) = size
-        
+
         # update pref_col before change
         if cursor_coords:
             self.pref_col = cursor_coords[0]
@@ -605,19 +605,19 @@ class ListBox(BoxWidget):
         # "snap" to selectable widgets
         align_top = 0
         align_bottom = maxrow - tgt_rows
-        
+
         if ( coming_from == 'above' 
                 and target.selectable()
                 and offset_inset > align_bottom
                 and align_bottom >= offset_inset-snap_rows ):
             offset_inset = align_bottom
-            
+
         if ( coming_from == 'below' 
                 and target.selectable() 
                 and offset_inset < align_top
                 and align_top <= offset_inset+snap_rows ):
             offset_inset = align_top
-        
+
         # convert offset_inset to offset_rows or inset_fraction
         if offset_inset >= 0:
             self.offset_rows = offset_inset
@@ -627,17 +627,17 @@ class ListBox(BoxWidget):
                 raise ListBoxError, "Invalid offset_inset: %s, only %s rows in target!" %(offset_inset, tgt_rows)
             self.offset_rows = 0
             self.inset_fraction = (-offset_inset,tgt_rows)
-        
+
         if cursor_coords is None:
             if coming_from is None: 
                 return # must either know row or coming_from
             cursor_coords = (self.pref_col,)
-        
+
         if not hasattr(target,'move_cursor_to_coords'):
             return
-            
+
         attempt_rows = []
-        
+
         if len(cursor_coords) == 1:
             # only column (not row) specified
             # start from closest edge and move inwards
@@ -684,7 +684,7 @@ class ListBox(BoxWidget):
     def make_cursor_visible(self, size):
         """Shift the focus widget so that its cursor is visible."""
         (maxcol, maxrow) = size
-        
+
         focus_widget, pos = self.body.get_focus()
         if focus_widget is None:
             return
@@ -698,11 +698,11 @@ class ListBox(BoxWidget):
         cx, cy = cursor
         offset_rows, inset_rows = self.get_focus_offset_inset(
             (maxcol, maxrow))
-        
+
         if cy < inset_rows:
             self.shift_focus( (maxcol,maxrow), - (cy) )
             return
-            
+
         if offset_rows - inset_rows + cy >= maxrow:
             self.shift_focus( (maxcol,maxrow), maxrow-cy-1 )
             return
@@ -713,7 +713,7 @@ class ListBox(BoxWidget):
         necessary. 'up' and 'down' are first passed to widget in focus
         in case that widget can handle them. 'page up' and 'page down'
         are always handled by the ListBox.
-        
+
         Keystrokes handled by this widget are:
          'up'        up one line (or widget)
          'down'      down one line (or widget)
@@ -724,46 +724,46 @@ class ListBox(BoxWidget):
 
         if self.set_focus_pending or self.set_focus_valign_pending:
             self._set_focus_complete( (maxcol,maxrow), focus=True )
-            
+
         focus_widget, pos = self.body.get_focus()
         if focus_widget is None: # empty listbox, can't do anything
             return key
-            
+
         if key not in ['page up','page down']:
             if focus_widget.selectable():
                 key = focus_widget.keypress((maxcol,),key)
             if key is None: 
                 self.make_cursor_visible((maxcol,maxrow))
                 return
-        
+
         # pass off the heavy lifting
         if command_map[key] == 'cursor up':
             return self._keypress_up((maxcol, maxrow))
-            
+
         if command_map[key] == 'cursor down':
             return self._keypress_down((maxcol, maxrow))
 
         if command_map[key] == 'cursor page up':
             return self._keypress_page_up((maxcol, maxrow))
-            
+
         if command_map[key] == 'cursor page down':
             return self._keypress_page_down((maxcol, maxrow))
 
         return key
-        
-    
+
+
     def _keypress_up(self, size):
         (maxcol, maxrow) = size
 
         middle, top, bottom = self.calculate_visible(
             (maxcol,maxrow), True)
         if middle is None: return 'up'
-        
+
         focus_row_offset,focus_widget,focus_pos,_ignore,cursor = middle
         trim_top, fill_above = top
-        
+
         row_offset = focus_row_offset
-        
+
         # look for selectable widget above
         pos = focus_pos
         widget = None
@@ -774,11 +774,11 @@ class ListBox(BoxWidget):
                 self.change_focus((maxcol,maxrow), pos,
                     row_offset, 'below')
                 return
-        
+
         # at this point we must scroll
         row_offset += 1
         self._invalidate()
-        
+
         if row_offset > 0:
             # need to scroll in another candidate widget
             widget, pos = self.body.get_prev(pos)
@@ -792,7 +792,7 @@ class ListBox(BoxWidget):
                 self.change_focus((maxcol,maxrow), pos,
                     row_offset, 'below')
                 return
-        
+
         if not focus_widget.selectable() or focus_row_offset+1>=maxrow:
             # just take top one if focus is not selectable
             # or if focus has moved out of view
@@ -816,30 +816,30 @@ class ListBox(BoxWidget):
                         return # can't do anything
                     rows = widget.rows((maxcol,), True)
                     row_offset -= rows
-                
+
                 if -row_offset >= rows:
                     # must scroll further than 1 line
                     row_offset = - (rows-1)
-                
+
                 self.change_focus((maxcol,maxrow),pos,
                     row_offset, 'below')
                 return
 
         # if all else fails, just shift the current focus.
         self.shift_focus((maxcol,maxrow), focus_row_offset+1)
-            
-            
-                
+
+
+
     def _keypress_down(self, size):
         (maxcol, maxrow) = size
 
         middle, top, bottom = self.calculate_visible(
             (maxcol,maxrow), True)
         if middle is None: return 'down'
-            
+
         focus_row_offset,focus_widget,focus_pos,focus_rows,cursor=middle
         trim_bottom, fill_below = bottom
-        
+
         row_offset = focus_row_offset + focus_rows
         rows = focus_rows
 
@@ -853,11 +853,11 @@ class ListBox(BoxWidget):
                     row_offset, 'above')
                 return
             row_offset += rows
-        
+
         # at this point we must scroll
         row_offset -= 1
         self._invalidate()
-        
+
         if row_offset < maxrow:
             # need to scroll in another candidate widget
             widget, pos = self.body.get_next(pos)
@@ -871,7 +871,7 @@ class ListBox(BoxWidget):
                 return
             rows = widget.rows((maxcol,))
             row_offset += rows
-        
+
         if not focus_widget.selectable() or focus_row_offset+focus_rows-1 <= 0:
             # just take bottom one if current is not selectable
             # or if focus has moved out of view
@@ -903,30 +903,30 @@ class ListBox(BoxWidget):
                 if row_offset >= maxrow:
                     # must scroll further than 1 line
                     row_offset = maxrow-1
-                    
+
                 self.change_focus((maxcol,maxrow),pos,
                     row_offset, 'above', )
                 return
 
         # if all else fails, keep the current focus.
         self.shift_focus((maxcol,maxrow), focus_row_offset-1)
-                
-                
-            
+
+
+
     def _keypress_page_up(self, size):
         (maxcol, maxrow) = size
-        
+
         middle, top, bottom = self.calculate_visible(
             (maxcol,maxrow), True)
         if middle is None: return 'page up'
-            
+
         row_offset, focus_widget, focus_pos, focus_rows, cursor = middle
         trim_top, fill_above = top
 
         # topmost_visible is row_offset rows above top row of 
         # focus (+ve) or -row_offset rows below top row of focus (-ve)
         topmost_visible = row_offset
-        
+
         # scroll_from_row is (first match)
         # 1. topmost visible row if focus is not selectable
         # 2. row containing cursor if focus has a cursor
@@ -941,18 +941,18 @@ class ListBox(BoxWidget):
             scroll_from_row = 0
         else:
             scroll_from_row = topmost_visible
-        
+
         # snap_rows is maximum extra rows to scroll when
         # snapping to new a focus
         snap_rows = topmost_visible - scroll_from_row
 
         # move row_offset to the new desired value (1 "page" up)
         row_offset = scroll_from_row + maxrow
-        
+
         # not used below:
         scroll_from_row = topmost_visible = None
-        
-        
+
+
         # gather potential target widgets
         t = []
         # add current focus
@@ -985,10 +985,10 @@ class ListBox(BoxWidget):
         if row_offset >= maxrow:
             del t[0]
             snap_region_start -= 1
-        
+
         # we'll need this soon
         self.update_pref_col_from_focus((maxcol,maxrow))
-            
+
         # choose the topmost selectable and (newly) visible widget
         # search within snap_rows then visible region
         search_order = ( range( snap_region_start, len(t))
@@ -1003,7 +1003,7 @@ class ListBox(BoxWidget):
 
             # try selecting this widget
             pref_row = max(0, -row_offset)
-            
+
             # if completely within snap region, adjust row_offset
             if rows + row_offset <= 0:
                 self.change_focus( (maxcol,maxrow), pos,
@@ -1014,17 +1014,17 @@ class ListBox(BoxWidget):
                 self.change_focus( (maxcol,maxrow), pos,
                     row_offset, 'below', 
                     (self.pref_col, pref_row), snap_rows )
-            
+
             # if we're as far up as we can scroll, take this one
             if (fill_above and self.body.get_prev(fill_above[-1][1])
                 == (None,None) ):
                 pass #return
-            
+
             # find out where that actually puts us
             middle, top, bottom = self.calculate_visible(
                 (maxcol,maxrow), True)
             act_row_offset, _ign1, _ign2, _ign3, _ign4 = middle
-            
+
             # discard chosen widget if it will reduce scroll amount
             # because of a fixed cursor (absolute last resort)
             if act_row_offset > row_offset+snap_rows:
@@ -1033,43 +1033,43 @@ class ListBox(BoxWidget):
             if act_row_offset < row_offset:
                 bad_choices.append(i)
                 continue
-            
+
             # also discard if off top edge (second last resort)
             if act_row_offset < 0:
                 bad_choices.append(i)
                 cut_off_selectable_chosen = 1
                 continue
-            
+
             return
-            
+
         # anything selectable is better than what follows:
         if cut_off_selectable_chosen:
             return
-                
+
         if fill_above and focus_widget.selectable():
             # if we're at the top and have a selectable, return
             if self.body.get_prev(fill_above[-1][1]) == (None,None):
                 pass #return
-                
+
         # if still none found choose the topmost widget
         good_choices = [j for j in search_order if j not in bad_choices]
         for i in good_choices + search_order:
             row_offset, widget, pos, rows = t[i]
             if pos == focus_pos: continue
-            
+
             # if completely within snap region, adjust row_offset
             if rows + row_offset <= 0:
                 snap_rows -= (-row_offset) - (rows-1)
                 row_offset = -(rows-1)
-                
+
             self.change_focus( (maxcol,maxrow), pos,
                 row_offset, 'below', None,
                 snap_rows )
             return
-            
+
         # no choices available, just shift current one
         self.shift_focus((maxcol, maxrow), min(maxrow-1,row_offset))
-        
+
         # final check for pathological case where we may fall short
         middle, top, bottom = self.calculate_visible(
             (maxcol,maxrow), True)
@@ -1077,7 +1077,7 @@ class ListBox(BoxWidget):
         if act_row_offset >= row_offset:
             # no problem
             return
-            
+
         # fell short, try to select anything else above
         if not t:
             return
@@ -1090,25 +1090,25 @@ class ListBox(BoxWidget):
         rows = widget.rows((maxcol,), True)
         self.change_focus((maxcol,maxrow), pos, -(rows-1),
             'below', (self.pref_col, rows-1), 0 )
-        
-            
-        
-        
-        
-        
+
+
+
+
+
+
     def _keypress_page_down(self, size):
         (maxcol, maxrow) = size
-        
+
         middle, top, bottom = self.calculate_visible(
             (maxcol,maxrow), True)
         if middle is None: return 'page down'
-            
+
         row_offset, focus_widget, focus_pos, focus_rows, cursor = middle
         trim_bottom, fill_below = bottom
 
         # bottom_edge is maxrow-focus_pos rows below top row of focus
         bottom_edge = maxrow - row_offset
-        
+
         # scroll_from_row is (first match)
         # 1. bottom edge if focus is not selectable
         # 2. row containing cursor + 1 if focus has a cursor
@@ -1123,18 +1123,18 @@ class ListBox(BoxWidget):
             scroll_from_row = focus_rows
         else:
             scroll_from_row = bottom_edge
-        
+
         # snap_rows is maximum extra rows to scroll when
         # snapping to new a focus
         snap_rows = bottom_edge - scroll_from_row
 
         # move row_offset to the new desired value (1 "page" down)
         row_offset = -scroll_from_row
-        
+
         # not used below:
         scroll_from_row = bottom_edge = None
-        
-        
+
+
         # gather potential target widgets
         t = []
         # add current focus
@@ -1156,7 +1156,7 @@ class ListBox(BoxWidget):
             # determine if one above puts current one into snap rgn
             if row_offset < maxrow:
                 snap_region_start += 1
-        
+
         # if we can't fill the bottom we need to adjust the row offsets
         row_offset, w, p, rows = t[-1]
         if row_offset + rows < maxrow:
@@ -1171,7 +1171,7 @@ class ListBox(BoxWidget):
 
         # we'll need this soon
         self.update_pref_col_from_focus((maxcol,maxrow))
-            
+
         # choose the bottommost selectable and (newly) visible widget
         # search within snap_rows then visible region
         search_order = ( range( snap_region_start, len(t))
@@ -1186,7 +1186,7 @@ class ListBox(BoxWidget):
 
             # try selecting this widget
             pref_row = min(maxrow-row_offset-1, rows-1)
-            
+
             # if completely within snap region, adjust row_offset
             if row_offset >= maxrow:
                 self.change_focus( (maxcol,maxrow), pos,
@@ -1197,7 +1197,7 @@ class ListBox(BoxWidget):
                 self.change_focus( (maxcol,maxrow), pos,
                     row_offset, 'above', 
                     (self.pref_col, pref_row), snap_rows )
-            
+
             # find out where that actually puts us
             middle, top, bottom = self.calculate_visible(
                 (maxcol,maxrow), True)
@@ -1211,15 +1211,15 @@ class ListBox(BoxWidget):
             if act_row_offset > row_offset:
                 bad_choices.append(i)
                 continue
-            
+
             # also discard if off top edge (second last resort)
             if act_row_offset+rows > maxrow:
                 bad_choices.append(i)
                 cut_off_selectable_chosen = 1
                 continue
-            
+
             return
-            
+
         # anything selectable is better than what follows:
         if cut_off_selectable_chosen:
             return
@@ -1229,21 +1229,21 @@ class ListBox(BoxWidget):
         for i in good_choices + search_order:
             row_offset, widget, pos, rows = t[i]
             if pos == focus_pos: continue
-            
+
             # if completely within snap region, adjust row_offset
             if row_offset >= maxrow:
                 snap_rows -= snap_rows+maxrow-row_offset-1
                 row_offset = maxrow-1
-                
+
             self.change_focus( (maxcol,maxrow), pos,
                 row_offset, 'above', None,
                 snap_rows )
             return
-        
-            
+
+
         # no choices available, just shift current one
         self.shift_focus((maxcol, maxrow), max(1-focus_rows,row_offset))
-        
+
         # final check for pathological case where we may fall short
         middle, top, bottom = self.calculate_visible(
             (maxcol,maxrow), True)
@@ -1251,7 +1251,7 @@ class ListBox(BoxWidget):
         if act_row_offset <= row_offset:
             # no problem
             return
-            
+
         # fell short, try to select anything else below
         if not t:
             return
@@ -1275,7 +1275,7 @@ class ListBox(BoxWidget):
             focus=True)
         if middle is None:
             return False
-        
+
         _ignore, focus_widget, focus_pos, focus_rows, cursor = middle
         trim_top, fill_above = top
         _ignore, fill_below = bottom
@@ -1297,7 +1297,7 @@ class ListBox(BoxWidget):
         if is_mouse_press(event) and button==1:
             if w.selectable():
                 self.change_focus((maxcol,maxrow), w_pos, wrow)
-        
+
         if not hasattr(w,'mouse_event'):
             return False
 
@@ -1307,7 +1307,7 @@ class ListBox(BoxWidget):
 
     def ends_visible(self, size, focus=False):
         """Return a list that may contain 'top' and/or 'bottom'.
-        
+
         convenience function for checking whether the top and bottom
         of the list are visible
         """

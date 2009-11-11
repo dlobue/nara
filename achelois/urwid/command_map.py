@@ -46,16 +46,16 @@ class CommandMap:
 
     def restore_defaults(self):
         self._command = dict(self._command_defaults)
-    
+
     def __getitem__(self, key):
         return self._command.get(key, None)
-    
+
     def __setitem__(self, key, command):
         self._command[key] = command
 
     def __delitem__(self, key):
         del self._command[key]
-    
+
     def clear_command(self, command):
         dk = [k for k, v in self._command.items() if v == command]
         for k in dk:

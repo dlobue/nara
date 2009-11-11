@@ -22,6 +22,7 @@
 from util import *
 
 class TextLayout:
+    __slots__ = ()
     def supports_align_mode(self, align):
         """Return True if align is a supported align mode."""
         return True
@@ -31,7 +32,7 @@ class TextLayout:
     def layout(self, text, width, align, wrap ):
         """
         Return a layout structure for text.
-        
+
         text -- string in current encoding or unicode string
         width -- number of screen columns available
         align -- align mode for text
@@ -54,6 +55,7 @@ class TextLayout:
         return [[]]
 
 class StandardTextLayout(TextLayout):
+    __slots__ = ()
     def __init__(self):#, tab_stops=(), tab_stop_every=8):
         pass
         #"""
@@ -106,17 +108,17 @@ class StandardTextLayout(TextLayout):
             assert align == 'center'
             out.append([((width-sc+1)/2, None)] + l)
         return out
-        
+
 
     def calculate_text_segments( self, text, width, wrap ):
         """
         Calculate the segments of text to display given width screen 
         columns to display them.  
-        
+
         text - text to display
         width - number of available screen columns
         wrap - wrapping mode used
-        
+
         Returns a layout structure without aligmnent applied.
         """
         b = []
@@ -135,7 +137,7 @@ class StandardTextLayout(TextLayout):
                 p = n_cr+1
             return b
 
-        
+
         while p<=len(text):
             # look for next eligible line break
             n_cr = text.find("\n", p)
@@ -152,7 +154,7 @@ class StandardTextLayout(TextLayout):
                 b.append([(sc,p,n_cr),
                     # removed character hint
                     (0,n_cr)])
-                
+
                 p = n_cr+1
                 continue
             pos, sc = calc_text_pos( text, p, n_cr, width )
@@ -221,8 +223,8 @@ class StandardTextLayout(TextLayout):
                             b[-1].append((0,p))
                             p += 1
                         continue
-                        
-                        
+
+
                 # force any char wrap
                 b.append([(sc,p,pos)])
                 p = pos
@@ -235,18 +237,19 @@ class StandardTextLayout(TextLayout):
 default_layout = StandardTextLayout()
 ######################################
 
-    
+
 class LayoutSegment:
+    __slots__ = ('sc', 'offs', 'text', 'end')
     def __init__(self, seg):
         """Create object from line layout segment structure"""
-        
+
         assert type(seg) == type(()), `seg`
         assert len(seg) in (2,3), `seg`
-        
+
         self.sc, self.offs = seg[:2]
-        
+
         assert type(self.sc) == type(0), `self.sc`
-        
+
         if len(seg)==3:
             assert type(self.offs) == type(0), `self.offs`
             assert self.sc > 0, `seg`
@@ -264,7 +267,7 @@ class LayoutSegment:
                 assert self.sc >= 0, `seg`
                 assert type(self.offs)==type(0)
             self.text = self.end = None
-            
+
     def subseg(self, text, start, end):
         """
         Return a "sub-segment" list containing segment structures 
@@ -322,18 +325,18 @@ def shift_line( segs, amount ):
     amount -- screen columns to shift right (+ve) or left (-ve)
     """
     assert type(amount)==type(0), `amount`
-    
+
     if segs and len(segs[0])==2 and segs[0][1]==None:
         # existing shift
         amount += segs[0][0]
         if amount:
             return [(amount,None)]+segs[1:]
         return segs[1:]
-            
+
     if amount:
         return [(amount,None)]+segs
     return segs
-    
+
 
 def trim_line( segs, text, start, end ):
     """
@@ -410,7 +413,7 @@ def calc_line_pos( text, line_layout, pref_col ):
                 elif current_sc <= pref_col:
                     closest_sc = current_sc + s.sc - 1
                     closest_pos = s
-                    
+
             if closest_sc is None or ( abs(pref_col-current_sc)
                     < abs(pref_col-closest_sc) ):
                 # this screen column is closer
@@ -420,7 +423,7 @@ def calc_line_pos( text, line_layout, pref_col ):
                 # we're moving past
                 break
         current_sc += s.sc
-    
+
     if closest_pos is None or type(closest_pos) == type(0):
         return closest_pos
 
@@ -436,11 +439,11 @@ def calc_pos( text, layout, pref_col, row ):
 
     if row < 0 or row >= len(layout):
         raise Exception("calculate_pos: out of layout row range")
-    
+
     pos = calc_line_pos( text, layout[row], pref_col )
     if pos is not None:
         return pos
-    
+
     rows_above = range(row-1,-1,-1)
     rows_below = range(row+1,len(layout))
     while rows_above and rows_below:
@@ -458,7 +461,7 @@ def calc_pos( text, layout, pref_col, row ):
 def calc_coords( text, layout, pos, clamp=1 ):
     """
     Calculate the coordinates closest to position pos in text with layout.
-    
+
     text -- raw string or unicode string
     layout -- layout structure applied to text
     pos -- integer position into text
@@ -485,7 +488,7 @@ def calc_coords( text, layout, pos, clamp=1 ):
                 closest = distance, (x,y)
             x += s.sc
         y += 1
-    
+
     if closest:
         return closest[1]
     return 0,0

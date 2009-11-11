@@ -129,10 +129,10 @@ def _value_lookup_table(values, size):
     """
     Generate a lookup table for finding the closest item in values.
     Lookup returns (index into values)+1
-    
+
     values -- list of values in ascending order, all < size
     size -- size of lookup table and maximum value
-    
+
     >>> _value_lookup_table([0, 7, 9], 10)
     [0, 0, 0, 0, 1, 1, 1, 1, 2, 2]
     """
@@ -249,7 +249,7 @@ def _color_desc_88(num):
     0..15 -> 'h0'..'h15' basic colors (as high-colors)
     16..79 -> '#000'..'#fff' color cube colors
     80..87 -> 'g18'..'g90' grays
-    
+
     >>> _color_desc_88(15)
     'h15'
     >>> _color_desc_88(16)
@@ -282,7 +282,7 @@ def _parse_color_256(desc):
     '#000'..'#fff' -> 16..231 color cube colors
     'g0'..'g100' -> 16, 232..255, 231 grays and color cube black/white
     'g#00'..'g#ff' -> 16, 232...255, 231 gray and color cube black/white
-    
+
     Returns None if desc is invalid.
 
     >>> _parse_color_256('h142')
@@ -350,9 +350,9 @@ def _parse_color_88(desc):
     '#000'..'#fff' -> 16..79 color cube colors
     'g0'..'g100' -> 16, 80..87, 79 grays and color cube black/white
     'g#00'..'g#ff' -> 16, 80...87, 79 gray and color cube black/white
-    
+
     Returns None if desc is invalid.
-    
+
     >>> _parse_color_88('h142')
     >>> _parse_color_88('h42')
     42
@@ -581,7 +581,7 @@ class AttrSpec(object):
         if self._value & _HIGH_88_COLOR:
             return _color_desc_88(self.background_number)
         return _color_desc_256(self.background_number)
-        
+
     def _set_background(self, background):
         flags = 0
         if background in ('', 'default'):
@@ -607,7 +607,7 @@ class AttrSpec(object):
         Return (fg_red, fg_green, fg_blue, bg_red, bg_green, bg_blue) color
         components.  Each component is in the range 0-255.  Values are taken
         from the XTerm defaults and may not exactly match the user's terminal.
-        
+
         If the foreground or background is 'default' then all their compenents
         will be returned as None.
 
@@ -639,7 +639,7 @@ class RealTerminal(object):
         super(RealTerminal,self).__init__()
         self._signal_keys_set = False
         self._old_signal_keys = None
-        
+
     def tty_signal_keys(self, intr=None, quit=None, start=None, 
         stop=None, susp=None):
         """
@@ -661,25 +661,25 @@ class RealTerminal(object):
         skeys = (sattr[termios.VINTR], sattr[termios.VQUIT],
             sattr[termios.VSTART], sattr[termios.VSTOP],
             sattr[termios.VSUSP])
-        
+
         if intr == 'undefined': intr = 0
         if quit == 'undefined': quit = 0
         if start == 'undefined': start = 0
         if stop == 'undefined': stop = 0
         if susp == 'undefined': susp = 0
-        
+
         if intr is not None: tattr[6][termios.VINTR] = intr
         if quit is not None: tattr[6][termios.VQUIT] = quit
         if start is not None: tattr[6][termios.VSTART] = start
         if stop is not None: tattr[6][termios.VSTOP] = stop
         if susp is not None: tattr[6][termios.VSUSP] = susp
-        
+
         if intr is not None or quit is not None or \
             start is not None or stop is not None or \
             susp is not None:
             termios.tcsetattr(fd, termios.TCSADRAIN, tattr)
             self._signal_keys_set = True
-        
+
         return skeys
 
 
@@ -707,13 +707,13 @@ class BaseScreen(object):
             The (name, like_other_name) format will copy the settings
             from the palette entry like_other_name, which must appear
             before this tuple in the list.
-            
+
             The mono and foreground/background_high values are 
             optional ie. the second tuple format may have 3, 4 or 6 
             values.  See register_palette_entry() for a description 
             of the tuple values.
         """
-        
+
         for item in palette:
             if len(item) in (3,4,6):
                 self.register_palette_entry(*item)
@@ -754,7 +754,7 @@ class BaseScreen(object):
             'default' (use the terminal's default background),
             'black', 'dark red', 'dark green', 'brown', 'dark blue',
             'dark magenta', 'dark cyan', 'light gray'
-        
+
         mono -- a comma-separated string containing monochrome terminal 
             settings (see "Settings" above.)
 
@@ -791,7 +791,7 @@ class BaseScreen(object):
         if mono is None:
             mono = DEFAULT
         mono = AttrSpec(mono, DEFAULT, 1)
-        
+
         if foreground_high is None:
             foreground_high = foreground
         if background_high is None:
@@ -802,7 +802,7 @@ class BaseScreen(object):
         signals.emit_signal(self, UPDATE_PALETTE_ENTRY,
             name, basic, mono, high_88, high_256)
         self._palette[name] = (basic, mono, high_88, high_256)
-        
+
 
 
 def _test():

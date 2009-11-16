@@ -39,6 +39,7 @@ class index_box(ListBox):
 class index_walker(ListWalker, MetaMixin):
     __slots__ = ('focus', '_tids', '_query', 'container', '_wstorage', '_rows', '_urwid_signals')
     signals = ['modified', 'keypress']
+    context = 'index_mode'
 
     def __hash__(self): return id(self)
 
@@ -97,7 +98,7 @@ class index_walker(ListWalker, MetaMixin):
         if not hasattr(w, '_conv'):
             w._init(conv)
             connect_signal(w, 'modified', self._modified)
-            connect_signal(w, 'keypress', self._keypress)
+            connect_signal(w, 'keypress', self.keypress)
         return w
 
     def _keypress(self, key):
@@ -126,6 +127,15 @@ class index_walker(ListWalker, MetaMixin):
 
         self._add_more_threads(sconn, to_get)
         
+        sconn.close()
+
+    def do_all_threads(self, size, key):
+        self._all_threads()
+
+    def _all_threads(self):
+        sconn = xappy.SearchConnection(srchidx)
+        self._update_tids(sconn)
+        self._add_more_threads(sconn, self._tids)
         sconn.close()
 
     def chk_new(self):

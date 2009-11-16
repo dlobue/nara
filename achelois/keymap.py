@@ -33,6 +33,9 @@ default = {
         'close_expanded': ['C'],
         'close_detailed': ['c'],
         },
+    'index_mode': {
+        'all_threads': ['L'],
+        },
     }
 custom = {}
 

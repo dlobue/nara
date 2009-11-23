@@ -91,6 +91,7 @@ class BigText(FixedWidget):
         return canv
 
 
+'''
 class LineBox(WidgetDecoration, WidgetWrap):
         #__slots__ = ()
         def __init__(self, original_widget):
@@ -120,6 +121,7 @@ class LineBox(WidgetDecoration, WidgetWrap):
 
             WidgetDecoration.__init__(self, original_widget)
             WidgetWrap.__init__(self, pile)
+'''
 
 
 class BarGraphMeta(WidgetMeta):

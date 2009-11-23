@@ -89,6 +89,7 @@ class MetaMixin(MetaBind):
     def _kemit(self, (maxcol,), key):
         self._emit('keypress', (maxcol,), key)
     def _keybind_failover(self, (maxcol,), key):
+        emit_signal(eband, 'log', 'in keybind failover trying key %s from class %s' % (key, self.__class__.__name__))
         self._kemit((maxcol,), key)
         return key
 

@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from overwatch import settings, MetaSignals, connect_signal, emit_signal, eband
+from overwatch import MetaSignals, connect_signal, eband
 #from overwatch import settings, MetaSignals, eband, Signals
 
 import urwid.curses_display
@@ -62,6 +62,11 @@ class Screen(object):
     def __init__(self):
         connect_signal(eband, 'emergency', self.shutdown)
         connect_signal(eband, 'log', self.addLine2)
+        connect_signal(eband, 'frame_connect', self.frame_con)
+        connect_signal(eband, 'redisplay', self.redisplay)
+
+    def frame_con(self, w):
+        connect_signal(w, 'modified', self.frame._invalidate)
 
     def shutdown(self):
         self.tui.stop()

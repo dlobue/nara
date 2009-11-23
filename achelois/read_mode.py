@@ -1,5 +1,7 @@
 #!/usr/bin/python
 
+from overwatch import eband, emit_signal, connect_signal
+
 from weakref import ref
 from threading import Thread
 
@@ -51,9 +53,10 @@ fold_guide = {
         }
 
 class text_select(MetaMixin, ScrollMixin, WidgetWrap):
-    __slots__ = ()
-    ignore_focus = False
+    __slots__ = ('__size')
+    #ignore_focus = False
     _selectable = True
+    no_cache = ['rows']
     context = 'read_mode'
     def __init__(self, txt='Loading', attr='default attr', focus='default focus'):
         w = Text(txt)
@@ -61,6 +64,16 @@ class text_select(MetaMixin, ScrollMixin, WidgetWrap):
         self.__super.__init__(w)
 
     def selectable(self): return self._selectable
+
+    def _rows(self, size=None, focus=False):
+        if type(size) is tuple: self.__size = size
+        elif not hasattr(self, '__size'):
+            raise TypeError
+        else:
+            size = self.__size
+        return self._w.rows(size, focus)
+    rows = _rows
+
     def __getitem__(self, idx):
         if idx == 0 or idx == -1:
             return self
@@ -124,6 +137,8 @@ class machined_widget(text_select):
 
 class collapser_label(text_select):
     __slots__ = ()
+    no_cache = ['rows']
+    context = 'read_mode'
     #def keypress(self, (maxcol,), key):
         #    self._emit('keypress', (maxcol,), key)
         #    return key
@@ -132,6 +147,7 @@ class collapser_blank(text_select):
     __slots__ = ()
     ignore_focus = True
     _selectable = False
+    context = 'read_mode'
 
 
 class collapser(MetaMixin, ScrollMixin):
@@ -167,6 +183,9 @@ class collapser(MetaMixin, ScrollMixin):
     def allconn_4cache(self):
         self._allconn_4cache()
         self._allconn_4child_cache()
+        self._kconnect(self.label)
+        if hasattr(self, 'spacer'):
+            self._kconnect(self.spacer)
 
     def update_widget(self):
         if not hasattr(self, 'label'): return
@@ -175,9 +194,13 @@ class collapser(MetaMixin, ScrollMixin):
             attr = {None: attr}
         if type(focus_attr) is str:
             focus_attr = {None: focus_attr}
+        #start_rows = self.label._rows()
         self.label.set_attr_map(attr)
         self.label.set_focus_map(focus_attr)
         self.label.set_text(txt)
+        #mod_rows = self.label._rows()
+        #if start_rows != mod_rows:
+            #emit_signal(eband, 'redisplay')
         self._modified()
 
     def auto_text(self): return 'Placeholder text'
@@ -396,6 +419,11 @@ class read_box(ListBox):
     def __init__(self, convobj):
         w = read_walker(convobj)
         self.__super.__init__(w)
+        emit_signal(eband, 'frame_connect', self)
+
+    def _invalidate(self):
+        emit_signal(self, 'modified')
+        self.__super._invalidate()
 
 class read_walker(ListWalker, MetaMixin):
     __slots__ = ('_cache', 'focus')

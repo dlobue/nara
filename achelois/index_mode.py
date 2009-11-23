@@ -28,7 +28,12 @@ class index_box(ListBox):
 
     def __init__(self, query):
         w = index_walker(query)
+        emit_signal(eband, 'frame_connect', self)
         self.__super.__init__(w)
+
+    def _invalidate(self):
+        emit_signal(self, 'modified')
+        self.__super._invalidate()
 
     def render(self, size, focus=False):
         maxcol, maxrow = size
@@ -57,7 +62,7 @@ class index_walker(ListWalker, MetaMixin):
     def _modified(self):
         if self.focus >= len(self.container):
             self.focus = max(0, len(self.container)-1)
-            ListWalker._modified(self)
+        ListWalker._modified(self)
             #emit_signal(self, 'modified')
 
     def get_focus(self):
@@ -164,6 +169,7 @@ class index_walker(ListWalker, MetaMixin):
         self.container.thread(to_join)
         emit_signal(eband, 'log', 'thread is now %s convs' % str(len(self.container)))
         self._modified()
+        emit_signal(eband, 'redisplay')
         #if len(to_join): self._modified()
         #return
 

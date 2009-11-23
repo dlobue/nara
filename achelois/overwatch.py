@@ -7,7 +7,7 @@ from urwid.signals import MetaSignals, emit_signal, register_signal, connect_sig
 class _eband(object):
     __slots__ = ('__weakref__', '_urwid_signals')
     __metaclass__ = MetaSignals
-    signals = ['emergency', 'log']
+    signals = ['emergency', 'log', 'frame_connect', 'redisplay']
     pass
 
 eband = _eband()

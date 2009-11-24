@@ -65,6 +65,9 @@ class text_select(MetaMixin, ScrollMixin, WidgetWrap):
 
     def selectable(self): return self._selectable
 
+    def __len__(self):
+        return 1
+
     def _rows(self, size=None, focus=False):
         if type(size) is tuple: self.__size = size
         elif not hasattr(self, '__size'):
@@ -92,6 +95,7 @@ class text_select(MetaMixin, ScrollMixin, WidgetWrap):
 
 class machined_widget(text_select):
     __slots__ = ('state', '_detail', 'expanded', 'new')
+    context = 'read_mode'
     def __init__(self, data, new):
         __state, __detail = data
         self.state = __state
@@ -103,8 +107,11 @@ class machined_widget(text_select):
         self.update_widget()
 
     def do_toggle_expanded(self, (maxcol,), key):
+        emit_signal(eband, 'log', 'in do_toggle_expanded for class %s' % str(self.__class__.__name__))
         try: self.expanded = fold_guide[self.state][1] #some widgets should never open, or be closed
         except IndexError: self.expanded = not self.expanded #the rest can toggle
+        self._invalidate()
+        self._memit()
 
     def update_widget(self):
         txt, attr, focus_attr = self.auto_text()
@@ -249,7 +256,7 @@ class collapser(MetaMixin, ScrollMixin):
             if idx == -1:
                 return self.label
             else:
-                raise IndexError("Invalid index")
+                raise IndexError("Invalid index: %i" % idx)
 
     def __len__(self):
         if self.expanded:
@@ -299,6 +306,16 @@ class group_state(collapser):
     def do_group_toggle_detailed(self, *args, **kwargs): return self._do_toggle_detailed(*args, **kwargs)
     def do_group_open_detailed(self, *args, **kwargs): return self._do_open_detailed(*args, **kwargs)
     def do_group_close_detailed(self, *args, **kwargs): return self._do_close_detailed(*args, **kwargs)
+
+    do_set_expanded = do_group_set_expanded
+    do_toggle_expanded = do_group_toggle_expanded
+    do_open_expanded = do_group_open_expanded
+    do_close_expanded = do_group_close_expanded
+
+    do_set_detailed = do_group_set_detailed
+    do_toggle_detailed = do_group_toggle_detailed
+    do_open_detailed = do_group_open_detailed
+    do_close_detailed = do_group_close_detailed
 
     '''
     def do_group_set_expanded(self, (maxcol,), status=None): self._change_expanded(status)
@@ -474,7 +491,9 @@ class read_walker(ListWalker, MetaMixin):
 
     def get_focus(self):
         convpos, msgpos, statepos = self.focus
-        __w = self._cache[convpos][msgpos][statepos]
+        try: __w = self._cache[convpos][msgpos][statepos]
+        except IndexError:
+            return self.get_next(self.focus)
         return __w, self.focus
 
     def set_focus(self, focus):

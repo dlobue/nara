@@ -1,24 +1,27 @@
 #!/usr/bin/python
 
-from overwatch import mail_grab, settings
+from overwatch import mail_grab, settings, xapidx
 
 from email.iterators import typed_subpart_iterator
 from Queue import Queue, Empty
 from threading import Thread
 from operator import itemgetter
 from types import GeneratorType
+import cPickle
+from sys import path
 
 from datetime import datetime
 
 import xappy
 
+from settings import settingsdir
 from lib.metautil import Singleton, MetaSuper
 from databasics import msg_fields, msg_container, msg_factory, lazythread_container, conv_factory
 
-import threadmap
-import forkmap
+from lib import threadmap, forkmap
 
-srchidx = 'xap.idx'
+#srchidx = 'xap.idx'
+srchidx = xapidx
 
 class XapProxy(Singleton):
     __slots__ = ()
@@ -36,6 +39,12 @@ class XapProxy(Singleton):
         if name in xappy.IndexerConnection.__dict__:
             return self._q_add(name)
         raise AttributeError('No such attribute %s' % name)
+
+    def process(self, doc):
+        try: return self._idxconn.process(doc)
+        except:
+            self.indexer_init()
+            return self._idxconn.process(doc)
 
     def worker(self):
         while 1:
@@ -180,7 +189,7 @@ def _preindex_thread(msgs):
         print "%s messages didn't find a thread" % c
     return msgs, threader
 
-def _ensure_threading_integrity(threader=None):
+def _ensure_threading_integrity(threader=None, all_new=False):
     if not threader:
         threader = lazythread_container()
         all_msgs = iterdocs()
@@ -194,7 +203,8 @@ def _ensure_threading_integrity(threader=None):
     def ctid_to_mtid(conv):
         ctid = conv.thread
         for msg in conv.messages:
-            id_data_tple = (msg.muuid, [('thread', ctid)])
+            id_data_tple = (msg, [('thread', ctid)]) #optimization: pass msg_container so we don't have to rebuild it again
+            #id_data_tple = (msg.muuid, [('thread', ctid)])
             if not msg.thread:
                 to_update.append(id_data_tple)
             elif ctid != msg.thread:
@@ -203,11 +213,13 @@ def _ensure_threading_integrity(threader=None):
     threadmap.map(ctid_to_mtid, threader)
     print "in update queue  %i" % len(to_update)
     print "in replace queue %i" % len(to_replace)
-    docs = modify_factory(to_update, update_existing)
-    docs.extend( modify_factory(to_replace, replace_existing) )
+    print '%s - starting modify factory on to_update' % datetime.now()
+    docs = modify_factory(to_update, update_existing, all_new)
+    print '%s - starting modify factory on to_replace' % datetime.now()
+    docs.extend( modify_factory(to_replace, replace_existing, all_new) )
     return docs
 
-def modify_factory(id_data_tples, modify_callback):
+def modify_factory(id_data_tples, modify_callback, all_new=False):
     """
     Used for getting the document items necessary for the search document
     modification functions.
@@ -218,8 +230,19 @@ def modify_factory(id_data_tples, modify_callback):
 
     Return data is a list of the now-modified documents, ready to be stored.
     """
-    __docs = ( (_get_doc(muuid), data) for muuid,data in id_data_tples )
+    print '%s - building tuples' % datetime.now()
+    if all_new:
+        #__docs = threadmap.map(lambda x: (make_doc(x[0]), x[1]), id_data_tples )
+        #__docs = forkmap.map(lambda x: (make_doc(x[0]), x[1]), id_data_tples )
+        __docs = ( (make_doc(muuid), data) for muuid,data in id_data_tples )
+    else:
+        #__docs = threadmap.map(lambda x: (_get_doc(x[0]), x[1]), id_data_tples )
+        #__docs = forkmap.map(lambda x: (_get_doc(x[0]), x[1]), id_data_tples )
+        #__docs = threadmap.map(lambda muuid,data: (_get_doc(muuid), data), id_data_tples )
+        __docs = ( (_get_doc(muuid), data) for muuid,data in id_data_tples )
+    print '%s - running callback modifier' % datetime.now()
     __docs = modify_callback(__docs)
+    print '%s - extracting docs' % datetime.now()
     __docs = threadmap.map(itemgetter(0), __docs)
     return __docs
 
@@ -258,7 +281,9 @@ def update_existing(doc_data_tples):
         map(per_field, data_tples)
         return doc
 
-    __docs = ( (per_doc(doc, data_tples), data_tples) for doc,data_tples in doc_data_tples )
+    __docs = threadmap.map(lambda x: (per_doc(x[0], x[1]), x[1]), doc_data_tples )
+    #__docs = threadmap.map(lambda doc,data_tples: (per_doc(doc, data_tples), data_tples), doc_data_tples )
+    #__docs = ( (per_doc(doc, data_tples), data_tples) for doc,data_tples in doc_data_tples )
     return __docs
 
 def modify_existing(id_data_tples, field, value=None, termadd=True, dataadd=None):
@@ -375,9 +400,9 @@ def index_factory(msgs, ensure=False):
 if __name__ == '__main__':
     import time
     print 'iterating through mail and creating msg_containers'
-    #t = time.time()
+    t = time.time()
     #all_rmsgs = [ msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() ]
-    #all_msgs = forkmap.map(msg_factory, mail_grab.iteritems())
+    all_msgs = forkmap.map(msg_factory, mail_grab.iteritems())
     #t = time.time() - t
     #print "done! took %r seconds" % t
     #print 'all_rmsgs %i' % len(all_msgs)
@@ -391,16 +416,16 @@ if __name__ == '__main__':
 
     #import sys
     #sys.exit()
-    print "building msgs now"
-    t = time.time()
-    all_msgs = map(msg_factory, iterdocs())
+    #print "building msgs now"
+    #t = time.time()
+    #all_msgs = forkmap.map(msg_factory, iterdocs())
     t = time.time() - t
     print "done! took %r seconds" % t
     threader = lazythread_container()
     print "building conversations"
     t = time.time()
-    convs = map(conv_factory, all_msgs)
-    #convs = threadmap.map(conv_factory, all_msgs)
+    #convs = map(conv_factory, all_msgs)
+    convs = threadmap.map(conv_factory, all_msgs)
     t = time.time() - t
     print "done! took %r seconds" % t
     print 'threading'
@@ -412,18 +437,32 @@ if __name__ == '__main__':
     c = 0
     for conv in threader:
         c+=len(conv.messages)
-    print c, " total messages, out of 8990"
-    import sys
-    sys.exit()
+    print c, " total messages, out of ", len(all_msgs)
     print 'running integrity checker'
     t = time.time()
-    docs = _ensure_threading_integrity(threader)
+    docs = _ensure_threading_integrity(threader, True)
     t = time.time() - t
     print "done! took %r seconds" % t
+    print "pickling results"
+    t = time.time()
+    finwork = path.join(settingsdir, 'preprocess.pickle')
+    try:
+        with open(finwork, 'rb') as f:
+            cPickle.dump(docs, f)
+    except:
+        pass
+    t = time.time() - t
+    print "done! took %r seconds" % t
+    #print 'processing docs'
+    #t = time.time()
+    #docs = threadmap.map(xconn.process, docs)
+    #docs = map(xconn.process, docs)
+    #t = time.time() - t
+    #print "done! took %r seconds" % t
     print 'queueing docs'
     t = time.time()
-    #map(xconn.replace, docs)
-    #xconn.flush()
+    map(xconn.replace, docs)
+    xconn.flush()
     t = time.time() - t
     print "done! took %r seconds" % t
     print "waiting for work to finish"

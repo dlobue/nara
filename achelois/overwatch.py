@@ -1,4 +1,4 @@
-from settings import get_settings, settings
+from settings import get_settings, settings, xapidx
 settings = get_settings()
 
 from urwid.signals import MetaSignals, emit_signal, register_signal, connect_signal, disconnect_signal
@@ -15,3 +15,6 @@ eband = _eband()
 from offlinemaildir import mail_sources
 
 mail_grab = mail_sources()
+
+if __name__ == '__main__':
+    print str(settings)

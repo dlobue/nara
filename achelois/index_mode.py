@@ -1,4 +1,4 @@
-from overwatch import settings, emit_signal, eband, emit_signal, connect_signal, MetaSignals, register_signal
+from overwatch import settings, emit_signal, eband, emit_signal, connect_signal, MetaSignals, register_signal, xapidx
 #from overwatch import settings, eband, MetaSignals, Signals
 from buffer import buffer_manager
 
@@ -20,7 +20,8 @@ from lib import threadmap, forkmap
 #from string import ascii_lowercase, digits, maketrans
 #anonitext = maketrans(ascii_lowercase + digits, 'x'*26 + '7'*len(digits))
 
-srchidx = 'xap.idx'
+#srchidx = 'xap.idx'
+srchidx = xapidx
 
 class index_box(ListBox):
     __slots__ = ('_urwid_signals')

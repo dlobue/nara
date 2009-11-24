@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from overwatch import MetaSignals, connect_signal, eband
+from overwatch import settings, xapidx, MetaSignals, connect_signal, eband
 #from overwatch import settings, MetaSignals, eband, Signals
 
 import urwid.curses_display
@@ -114,7 +114,7 @@ class Screen(object):
         self.lines = None
         self.lines2 = info_log_list([urwid.Text(('test','hello2'))],500)
 
-        sconn = xappy.SearchConnection('xap.idx')
+        sconn = xappy.SearchConnection(xapidx)
         qall = sconn.query_all()
         buffer_manager.register_support( qall, index_box)
         buffer_manager.register_support(self.lines2, info_log)

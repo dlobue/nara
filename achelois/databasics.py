@@ -71,7 +71,7 @@ def msg_factory(muuid, msg=None):
         muuid, msg = muuid.id, muuid.data
     except AttributeError:
         try:
-            muuid, msg = muuid.id, muuid.data
+            muuid, msg = muuid
         except: pass
 
 
@@ -157,11 +157,11 @@ def _conv_factory(msg):
 class msg_container(_msg_container):
     __slots__ = ()
 
-    #def __getstate__(self):
-        #    return dict((name, getattr(self, name)) for name in self.__slots__ if hasattr(self,name))
-    #def __setstate__(self, state):
-        #    for name,value in state.iteritems():
-            #        setattr(self, name, value)
+    def __getstate__(self):
+        return dict((name, getattr(self, name)) for name in self.__slots__ if hasattr(self,name))
+    def __setstate__(self, state):
+        for name,value in state.iteritems():
+            setattr(self, name, value)
 
     def get(self, key, alt=None):
         try: return getattr(self, key)
@@ -184,6 +184,11 @@ class conv_container(object):
     def __getattr__(self, name):
         return getattr(self._container, name)
 
+    def __getstate__(self):
+        return dict((name, getattr(self, name)) for name in self.__slots__ if hasattr(self,name))
+    def __setstate__(self, state):
+        for name,value in state.iteritems():
+            setattr(self, name, value)
     def __repr__(self):
         return repr(self._container)
     def __iter__(self):
@@ -350,8 +355,9 @@ class lazythread_container(thread_container):
                         __new_terms = removee.nique_terms.difference(termlist)
                         dictifyee.merge(removee)
                         termlist.extend(__new_terms)
-                        map(self._map.__delitem__,
-                            filter(lambda k: removee is self[k], removee.nique_terms))
+                        if self._map is not WeakValueDictionary:
+                            map(self._map.__delitem__,
+                                filter(lambda k: removee is self[k], removee.nique_terms))
                         #for k in removee.nique_terms:
                             #try: v = self[k]
                             #except KeyError: continue

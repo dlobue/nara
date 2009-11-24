@@ -69,6 +69,12 @@ class UnprocessedDocument(object):
     def __repr__(self):
         return 'UnprocessedDocument(%r, %r)' % (self.id, self.fields)
 
+    def __getstate__(self):
+        return dict((name, getattr(self, name)) for name in self.__slots__ if hasattr(self,name))
+    def __setstate__(self, state):
+        for name,value in state.iteritems():
+            setattr(self, name, value)
+
 class ProcessedDocument(object):
     """A processed document, as stored in the index.
 
@@ -83,7 +89,7 @@ class ProcessedDocument(object):
 
         `fieldmappings` is the configuration from a database connection used lookup
         the configuration to use to store each field.
-    
+
         If supplied, `xapdoc` is a Xapian document to store in the processed
         document.  Otherwise, a new Xapian document is created.
 
@@ -94,6 +100,12 @@ class ProcessedDocument(object):
             self._doc = xapdoc
         self._fieldmappings = fieldmappings
         self._data = None
+
+    def __getstate__(self):
+        return dict((name, getattr(self, name)) for name in self.__slots__ if hasattr(self,name))
+    def __setstate__(self, state):
+        for name,value in state.iteritems():
+            setattr(self, name, value)
 
     def add_term(self, field, term, wdfinc=1, positions=None):
         """Add a term to the document.

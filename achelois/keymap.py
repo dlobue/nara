@@ -33,6 +33,8 @@ default = {
         'open_detailed': ['D'],
         'close_expanded': ['C'],
         'close_detailed': ['c'],
+        'num_rows': ['n'],
+        'yank': ['y'],
         },
     'index_mode': {
         'all_threads': ['L'],

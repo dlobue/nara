@@ -43,7 +43,10 @@ class msg_machine(object):
         def _flush(newstate, theline):
             if cls.appendee:
                 while 1:
-                    endone = cls.appendee.pop()
+                    try: endone = cls.appendee.pop()
+                    except IndexError:
+                        cls.appendee.append(endone)
+                        break
                     if endone:
                         cls.appendee.append(endone)
                         break

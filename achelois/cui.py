@@ -6,6 +6,7 @@ from overwatch import settings, xapidx, MetaSignals, connect_signal, eband
 
 import urwid.curses_display
 import urwid
+from urwid import CanvasCache
 from buffer import buffer_manager
 from collections import deque
 
@@ -141,10 +142,10 @@ class Screen(object):
                 #if key in ('h','j','k','l','J','K'):
                     #key = keymap_alias[key]
 
-                #if key == 'x':
-                    #buffer_manager.destroy()
+                if key == 'x':
+                    buffer_manager.destroy()
 
-                if key == 'window resize':
+                elif key == 'window resize':
                     self.size = self.tui.get_cols_rows()
                     #elif key == 'f1':
                         #buffer_manager.set_buffer(self.thread.threadList)
@@ -154,7 +155,17 @@ class Screen(object):
                     buffer_manager.set_next()
                 elif key == 'B':
                     buffer_manager.set_prev()
+                elif key == 'r':
+                    self.addLine2(str(len(CanvasCache._widgets)))
+                    self.addLine2(str(len(CanvasCache._refs)))
+                    self.addLine2(str(len(CanvasCache._deps)))
                 elif key == 't':
+                    self.addLine2("\n\nbuffer manager _buffer contents:")
+                    for d in buffer_manager._buffers:
+                        self.addLine2('\n%s' % str(d))
+                    self.addLine2("\nbuffer manager _buffer len: %s" % str(len(buffer_manager._buffers)))
+                    self.addLine2("\nbuffer manager _order contents:")
+                    self.addLine2(str(buffer_manager._order))
                     #emit_signal(eband, 'log', 'hello world')
                     #tids = get_threads(sconn, qall)
                     #data = get_members(sconn, tids)

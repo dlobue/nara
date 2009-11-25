@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from weakref import WeakKeyDictionary, ref
 from threading import Thread
 
-from urwid import ListWalker, ListBox, WidgetWrap, MetaSuper, Text, AttrWrap
+from urwid import ListWalker, ListBox, WidgetWrap, MetaSuper, Text, AttrWrap, Columns
 import xappy
 
 from lib.metautil import MetaMixin, ScrollMixin
@@ -181,9 +181,35 @@ class conv_widget(MetaMixin, ScrollMixin, WidgetWrap):
     ignore_focus = False
     context = 'index_mode'
     
+    '''
     def __init__(self):
         txt = "Loading"
         w = Text(txt, wrap='clip')
+        w = AttrWrap(w, 'index notfocus',
+                     {None: 'index focus',
+                      'index notfocus': 'index focus',
+                      'index new': 'index new focus',
+                      'index read': 'index read focus',
+                      'index starred': 'index starred focus',
+                      'index label': 'index label focus',
+                      'index sample': 'index sample focus'
+                     }
+                    )
+        self.__super.__init__(w)
+    '''
+
+    def __init__(self):
+        txt = "Loading"
+        wsent = Text(txt, align='right')
+        wsender = Text(txt, wrap='clip')
+        wmsgs = Text(txt, align='center')
+        wsummary = Text(txt, wrap='clip')
+        w = Columns([
+                ('fixed', 10, wsent),
+                ('fixed', 25, wsender),
+                ('fixed', 5, wmsgs),
+                wsummary],
+                dividechars=1, min_width=4)
         w = AttrWrap(w, 'index notfocus',
                      {None: 'index focus',
                       'index notfocus': 'index focus',
@@ -229,7 +255,8 @@ class conv_widget(MetaMixin, ScrollMixin, WidgetWrap):
             else:
                 rep_date = ddate.strftime('%b %d')
 
-        ddate = ('index new', ' {0:>10}'.format(rep_date))
+        ddate = ('index new', str(rep_date))
+        #ddate = ('index new', ' {0:>10}'.format(rep_date))
 
         dsender = filter(chk_new, self._conv.messages)[:3]
         idx = None
@@ -273,10 +300,11 @@ class conv_widget(MetaMixin, ScrollMixin, WidgetWrap):
             last_sender = sendmarkup.pop()
             attr, fname = last_sender
             fname = fname.strip(',')
-            fname = fname.ljust(charsleft)
+            #fname = fname.ljust(charsleft)
             sendmarkup.append((attr, fname))
 
-        dcontained = ('index %s' % tstat, ' {0!s:^5}'.format(len(self._conv.messages)))
+        dcontained = ('index %s' % tstat, str(len(self._conv.messages)))
+        #dcontained = ('index %s' % tstat, ' {0!s:^5}'.format(len(self._conv.messages)))
         dlabels = ('index label', ' %s' % ' '.join(map(lambda x: '+%s' % x, self._conv.labels)))
         if dlabels[1] == ' ':
             dlabels = ' '
@@ -290,11 +318,16 @@ class conv_widget(MetaMixin, ScrollMixin, WidgetWrap):
 
     def set_text(self, markup):
         #def privatize_txt(x):
-            #    if type(x) is list:
-                #        return map(privatize_txt, x)
-                #    if type(x) is tuple and len(x) == 2:
-                    #        return (x[0], x[1].translate(anonitext))
-        return self._w.original_widget.set_text(markup)
+        #    if type(x) is list:
+        #        return map(privatize_txt, x)
+        #    if type(x) is tuple and len(x) == 2:
+        #        return (x[0], x[1].translate(anonitext))
+        #return self._w.original_widget.set_text(markup)
+        w = self._w.original_widget.widget_list
+        w[0].set_text(markup[0])
+        w[1].set_text(markup[1])
+        w[2].set_text(markup[2])
+        w[3].set_text(markup[3:])
 
     def do_activate(self, size, key):
         try: buffer_manager.set_buffer(self._conv)

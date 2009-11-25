@@ -57,6 +57,7 @@ class text_select(MetaMixin, ScrollMixin, WidgetWrap):
     #ignore_focus = False
     _selectable = True
     no_cache = ['rows']
+    signals = ['focus_modify']
     context = 'read_mode'
     def __init__(self, txt='Loading', attr='default attr', focus='default focus'):
         w = Text(txt)
@@ -67,6 +68,13 @@ class text_select(MetaMixin, ScrollMixin, WidgetWrap):
 
     def __len__(self):
         return 1
+
+    def _fconnect(self, child):
+        self._connect('focus_modify', child, self._femit)
+    def _femit(self, restore=False):
+        self._emit('focus_modify', restore)
+    def _femit1(self, mthd, status=None):
+        self._emit('focus_modify', mthd, status)
 
     def _rows(self, size=None, focus=False):
         if type(size) is tuple: self.__size = size
@@ -92,6 +100,8 @@ class text_select(MetaMixin, ScrollMixin, WidgetWrap):
         return self._w.set_focus_map(*args, **kwargs)
     def set_text(self, *args, **kwargs):
         return self._w.original_widget.set_text(*args, **kwargs)
+    def pack(self, *args, **kwargs):
+        return self._w.original_widget.pack(*args, **kwargs)
 
 class machined_widget(text_select):
     __slots__ = ('state', '_detail', 'expanded', 'new')
@@ -107,11 +117,11 @@ class machined_widget(text_select):
         self.update_widget()
 
     def do_toggle_expanded(self, (maxcol,), key):
+        if self.state == 'MSG': return self._kemit((maxcol,), key)
         emit_signal(eband, 'log', 'in do_toggle_expanded for class %s' % str(self.__class__.__name__))
         try: self.expanded = fold_guide[self.state][1] #some widgets should never open, or be closed
         except IndexError: self.expanded = not self.expanded #the rest can toggle
-        self._invalidate()
-        self._memit()
+        self.update_widget()
 
     def update_widget(self):
         txt, attr, focus_attr = self.auto_text()
@@ -153,6 +163,7 @@ class collapser_label(text_select):
 class collapser_blank(text_select):
     __slots__ = ()
     ignore_focus = True
+    no_cache = ()
     _selectable = False
     context = 'read_mode'
 
@@ -160,6 +171,7 @@ class collapser_blank(text_select):
 class collapser(MetaMixin, ScrollMixin):
     __slots__ = ('expanded', 'detailed', 'label', '_cache', '_urwid_signals', '__weakref__', 'new', 'spacer')
     __metaclass__ = MetaSupSig
+    signals = ['focus_modify']
     context = 'read_mode'
 
     def __init__(self, txt='Loading'):
@@ -194,6 +206,13 @@ class collapser(MetaMixin, ScrollMixin):
         if hasattr(self, 'spacer'):
             self._kconnect(self.spacer)
 
+    def _fconnect(self, child):
+        self._connect('focus_modify', child, self._femit)
+    def _femit(self, restore=False):
+        self._emit('focus_modify', restore)
+    def _femit1(self, mthd, status=None):
+        self._emit('focus_modify', mthd, status)
+
     def update_widget(self):
         if not hasattr(self, 'label'): return
         txt, attr, focus_attr = self.auto_text()
@@ -208,19 +227,19 @@ class collapser(MetaMixin, ScrollMixin):
         #mod_rows = self.label._rows()
         #if start_rows != mod_rows:
             #emit_signal(eband, 'redisplay')
-        self._modified()
+        #self._modified()
 
     def auto_text(self): return 'Placeholder text'
 
-    def _do_set_expanded(self, (maxcol,), status=None): self._change_expanded(status)
-    def _do_toggle_expanded(self, (maxcol,), key): self._change_expanded(None)
-    def _do_open_expanded(self, (maxcol,), key): self._change_expanded(True)
-    def _do_close_expanded(self, (maxcol,), key): self._change_expanded(False)
+    def _do_set_expanded(self, (maxcol,), status=None): self.change_expanded(status)
+    def _do_toggle_expanded(self, (maxcol,), key): self.change_expanded(None)
+    def _do_open_expanded(self, (maxcol,), key): self.change_expanded(True)
+    def _do_close_expanded(self, (maxcol,), key): self.change_expanded(False)
 
-    def _do_set_detailed(self, (maxcol,), status=None): self._change_detailed(status)
-    def _do_toggle_detailed(self, (maxcol,), key): self._change_detailed(None)
-    def _do_open_detailed(self, (maxcol,), key): self._change_detailed(True)
-    def _do_close_detailed(self, (maxcol,), key): self._change_detailed(False)
+    def _do_set_detailed(self, (maxcol,), status=None):self.change_detailed(status)
+    def _do_toggle_detailed(self, (maxcol,), key): self.change_detailed(None)
+    def _do_open_detailed(self, (maxcol,), key): self.change_detailed(True)
+    def _do_close_detailed(self, (maxcol,), key): self.change_detailed(False)
 
     def _change_expanded(self, status=None):
         if status is None: self.expanded = not self.expanded
@@ -228,7 +247,12 @@ class collapser(MetaMixin, ScrollMixin):
         if self.detailed and not self.expanded:
             self.detailed = False
         self.update_widget()
-    change_expanded = _change_expanded
+
+    def change_expanded(self, status=None):
+        #self._femit('_change_expanded', status)
+        self._femit()
+        self._change_expanded(status)
+        self._femit(True)
 
     def _change_detailed(self, status=None):
         if status is None: self.detailed = not self.detailed
@@ -236,7 +260,12 @@ class collapser(MetaMixin, ScrollMixin):
         if self.detailed and not self.expanded:
             self.expanded = True
         self.update_widget()
-    change_detailed = _change_detailed
+
+    def change_detailed(self, status=None):
+        #self._femit('_change_detailed', status)
+        self._femit()
+        self._change_detailed(status)
+        self._femit(True)
 
     def __getitem__(self, idx):
         if type(idx) is not int:
@@ -258,6 +287,20 @@ class collapser(MetaMixin, ScrollMixin):
             else:
                 raise IndexError("Invalid index: %i" % idx)
 
+    def row_len(self):
+        tot = self.label.pack()
+        if not self.expanded:
+            return tot
+        else:
+            if hasattr(self, 'spacer'):
+                tot += self.spacer.pack()
+            try:
+                mtot = map(lambda x: x.pack(), self._cache)
+            except AttributeError:
+                mtot = map(lambda x: x.row_len(), self._cache)
+            tot += sum(mtot)
+            return tot
+
     def __len__(self):
         if self.expanded:
             if hasattr(self, 'spacer'): v = 2
@@ -276,7 +319,8 @@ class group_state(collapser):
         self._cache.append(data)
         self.new = new
         if self.state == 'MSG':
-            self.spacer = collapser_blank('', 'blank', 'blank')
+            del self.label
+            self.label = self.spacer = collapser_blank('', 'blank', 'blank')
             #self.spacer = collapser_label('', 'blank', 'blank')
             self.expanded = True
 
@@ -307,15 +351,25 @@ class group_state(collapser):
     def do_group_open_detailed(self, *args, **kwargs): return self._do_open_detailed(*args, **kwargs)
     def do_group_close_detailed(self, *args, **kwargs): return self._do_close_detailed(*args, **kwargs)
 
-    do_set_expanded = do_group_set_expanded
-    do_toggle_expanded = do_group_toggle_expanded
-    do_open_expanded = do_group_open_expanded
-    do_close_expanded = do_group_close_expanded
+    def do_toggle_expanded(self, *args, **kwargs):
+        if self.state == 'MSG':
+            return self._kemit(*args, **kwargs)
+        return self.do_group_toggle_expanded(*args, **kwargs)
 
-    do_set_detailed = do_group_set_detailed
-    do_toggle_detailed = do_group_toggle_detailed
-    do_open_detailed = do_group_open_detailed
-    do_close_detailed = do_group_close_detailed
+    def do_open_expanded(self, *args, **kwargs):
+        if self.state == 'MSG':
+            return self._kemit(*args, **kwargs)
+        return self.do_group_open_expanded(*args, **kwargs)
+
+    def do_close_expanded(self, *args, **kwargs):
+        if self.state == 'MSG':
+            return self._kemit(*args, **kwargs)
+        return self.do_group_close_expanded(*args, **kwargs)
+
+    #do_set_detailed = do_group_set_detailed
+    #do_toggle_detailed = do_group_toggle_detailed
+    #do_open_detailed = do_group_open_detailed
+    #do_close_detailed = do_group_close_detailed
 
     '''
     def do_group_set_expanded(self, (maxcol,), status=None): self._change_expanded(status)
@@ -344,8 +398,10 @@ class message_widget(collapser):
         __msg_get = mymail.get(msgobj.muuid())
         __processed = msg_machine.process(__msg_get)
 
-        if self.new: self.update_widget()
-        else: self.change_expanded(True)
+        if self.new: self._change_detailed(True)
+        else: self.update_widget()
+        #if self.new: self.update_widget()
+        #else: self._change_expanded(False)
 
         def fadd(p):
             try: self._cache[self._state_order[p[0]]].append(machined_widget(p, self.new))
@@ -398,6 +454,10 @@ class message_widget(collapser):
         #__r = u"Sent %s by %s" % (__fd[0], __fd[1])
         return __r
 
+    def do_num_rows(self, (maxcol,), key):
+        lines = self.label.pack()
+        emit_signal(eband, 'log', '%s' % str(lines))
+
     def do_msg_set_expanded(self, *args, **kwargs): return self._do_set_expanded(*args, **kwargs)
     def do_msg_toggle_expanded(self, *args, **kwargs): return self._do_toggle_expanded(*args, **kwargs)
     def do_msg_open_expanded(self, *args, **kwargs): return self._do_open_expanded(*args, **kwargs)
@@ -431,27 +491,110 @@ class message_widget(collapser):
     '''
 
 class read_box(ListBox):
-    __slots__ = ('_urwid_signals')
-    signals = ['modified']
+    __slots__ = ('_urwid_signals', '__size', '_last_top')
+    signals = ['modified', 'yank']
     def __init__(self, convobj):
-        w = read_walker(convobj)
+        self.__size = None
+        w = read_walker(convobj, self)
+        connect_signal(w, 'yank', self.yank)
         self.__super.__init__(w)
         emit_signal(eband, 'frame_connect', self)
 
+    def modify_focus_valign(self, to_add):
+        shft = self.offset_rows + to_add
+        self.set_focus_valign(('fixed top', shft))
+
+    def store_top(self):
+        middle, (top_offset, top_widgets), bottom = self.calculate_visible(self.__size, True)
+        if len(top_widgets):
+            top_idx = top_widgets[-1][1]
+            if top_offset > 0:
+                top_offset = top_offset*-1
+                #top_offset = (top_offset-1)*-1
+        else:
+            top_idx = 0,0,0
+            top_offset = 0
+        self._last_top = (top_offset, top_idx)
+
+    def restore_top(self):
+        cur_focus = self.body.focus
+        top_offset, top_idx = self._last_top
+        self.change_focus(self.__size, top_idx, top_offset)
+        self.set_focus(cur_focus)
+
+    def yank(self, size=None):
+        emit_signal(eband, 'log', str(self.__size))
+        emit_signal(eband, 'log', str(self.offset_rows))
+        emit_signal(eband, 'log', str(self.get_focus()))
+        vis = self.calculate_visible(self.__size, True)
+        emit_signal(eband, 'log', 'middle:\n%s' % str(vis[0]))
+        emit_signal(eband, 'log', 'top:\n%s' % str(vis[1]))
+        emit_signal(eband, 'log', 'bottom:\n%s' % str(vis[2]))
+        #cur_focus = self.body.focus
+        #self.change_focus(self.__size, (4,1,1), -2)
+        #self.set_focus(cur_focus)
+        #self.modify_focus_valign(6)
+        #self.set_focus_valign(('fixed top', 6))
+        #self._invalidate()
+
+    def render(self, size, focus=False):
+        if self.__size != size: self.__size = size
+        return self.__super.render(size, focus)
+
     def _invalidate(self):
         emit_signal(self, 'modified')
-        self.__super._invalidate()
+        return self.__super._invalidate()
 
 class read_walker(ListWalker, MetaMixin):
-    __slots__ = ('_cache', 'focus')
-    def __init__(self, convobj):
+    __slots__ = ('_cache', 'focus', '_listbox', '_last_focus')
+    signals = ['yank', 'focus_modify']
+    context = 'read_mode'
+    def __init__(self, convobj, box):
         def quack(__x):
             __x.allconn_4cache()
 
+        self._listbox = ref(box)
         self._cache = map(message_widget, convobj.messages)
         map(quack, self._cache)
+        map(self.all_connect, self._cache)
         self.focus = 0, 0, 0
-        #self.find_oldest_new()
+        self.find_oldest_new()
+
+        emit_signal(eband, 'log', str(self._listbox()))
+        emit_signal(eband, 'log', str(dir(self._listbox())))
+
+    def _fconnect(self, child):
+        self._connect('focus_modify', child, self._focus_modify)
+    def _femit(self, restore=False):
+        self._emit('focus_modify', restore)
+    def _femit1(self, mthd, status=None):
+        self._emit('focus_modify', mthd, status)
+
+    def _focus_modify(self, restore=False):
+        emit_signal(eband, 'log', 'doing focus modifier')
+        if restore:
+            return self._listbox().restore_top()
+            #return self._listbox().set_focus(self._last_focus)
+        else:
+            return self._listbox().store_top()
+            #cur_focus = self.focus
+            #self._last_focus = cur_focus
+            #return self._listbox().set_focus((cur_focus[0], 0, 0))
+
+    def _focus_modify1(self, mthd, status=None):
+        emit_signal(eband, 'log', 'doing focus modifier, %s' % str(self.focus))
+        beg_focus = self.focus
+        #if beg_focus == (0,0,0): raise TypeError
+        self._listbox().set_focus((beg_focus[0], 0, 0))
+        #self.set_focus((beg_focus[0], 0, 0))
+
+        cllps = self._cache[beg_focus]
+        getattr(cllps, mthd)(status)
+
+        return self._listbox().set_focus(beg_focus)
+
+    def do_yank(self, (maxcol,), key):
+        emit_signal(self, 'yank', (maxcol,))
 
     def find_oldest_new(self):
         return self.find_next_new(start_from=(0,0,0))
@@ -462,7 +605,7 @@ class read_walker(ListWalker, MetaMixin):
         if convpos > 0: convpos += 1
         for __w in self._cache[convpos:]:
             if __w.expanded: break
-        __w.change_detailed(True)
+        __w._change_detailed(True)
         convpos = self._cache.index(__w)
         return self.set_focus((convpos, 0, 0))
 

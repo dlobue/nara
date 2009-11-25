@@ -37,6 +37,12 @@ class Field(object):
     def __repr__(self):
         return 'Field(%r, %r)' % (self.name, self.value)
 
+    def __getstate__(self):
+        return dict((name, getattr(self, name)) for name in self.__slots__ if hasattr(self,name))
+    def __setstate__(self, state):
+        for name,value in state.iteritems():
+            setattr(self, name, value)
+
 class UnprocessedDocument(object):
     """A unprocessed document to be passed to the indexer.
 

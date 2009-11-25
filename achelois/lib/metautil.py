@@ -77,12 +77,16 @@ class MetaMixin(MetaBind):
         emit_signal(self, signal, *args, **kwargs)
 
     def all_connect(self, child):
+        def do_connect(x):
+            try: getattr(self, x)(child)
+            except: pass
         def quack_filter(mthd):
             if mthd.startswith('_') and mthd.endswith('connect') and len(mthd) > 8:
                 return True
             return False
         __cntrs = filter(quack_filter, dir(self))
-        [getattr(self, __x)(child) for __x in __cntrs]
+        map(do_connect, __cntrs)
+        #[getattr(self, __x)(child) for __x in __cntrs]
 
     def _kconnect(self, child):
         self._connect('keypress', child, self.keypress)

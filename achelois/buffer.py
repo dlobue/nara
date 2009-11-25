@@ -85,14 +85,21 @@ class buffer_manager(object):
             data = cls._current
             if data not in cls._noremove:
                 cls.set_prev()
-                data.self_destruct()
+                data._invalidate()
+                __tmp = []
+                for d in cls._buffers.iteritems():
+                    if data in d:
+                        __tmp.append(d[0])
+                #data.self_destruct()
+                map(lambda x: cls._buffers.__delitem__(x), __tmp)
                 del cls._order[cls._order.index(data)]
                 del data
         else:
             if cls._buffers[data] not in cls._noremove:
                 try:
                     cls.set_prev(data)
-                    data.self_destruct()
+                    data._invalidate()
+                    #data.self_destruct()
                     del cls._order[cls._order.index(cls._buffers[data])]
                     del cls._buffers[data]
                 except: pass

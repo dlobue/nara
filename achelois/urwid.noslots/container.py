@@ -608,7 +608,7 @@ class Frame(BoxWidget):
         if self.footer is not None:
             remaining -= self.footer.rows((maxcol,))
         if remaining <= 0: return key
-
+    
         if not self.body.selectable():
             return key
         return self.body.keypress( (maxcol, remaining), key )

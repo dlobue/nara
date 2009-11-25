@@ -256,7 +256,7 @@ class ListBox(BoxWidget):
                 offset_rows -= fill_lines
                 break
             top_pos = pos
-
+    
             p_rows = prev.rows( (maxcol,) )
             fill_above.append( (prev, pos, p_rows) )
             if p_rows > fill_lines: # crosses top edge?
@@ -609,13 +609,15 @@ class ListBox(BoxWidget):
         if ( coming_from == 'above' 
                 and target.selectable()
                 and offset_inset > align_bottom
-                and align_bottom >= offset_inset-snap_rows ):
+                and align_bottom >= offset_inset-snap_rows
+                and snap_rows >= tgt_rows ):
             offset_inset = align_bottom
             
         if ( coming_from == 'below' 
                 and target.selectable() 
                 and offset_inset < align_top
-                and align_top <= offset_inset+snap_rows ):
+                and align_top <= offset_inset+snap_rows
+                and snap_rows >= tgt_rows ):
             offset_inset = align_top
         
         # convert offset_inset to offset_rows or inset_fraction
@@ -754,7 +756,7 @@ class ListBox(BoxWidget):
     
     def _keypress_up(self, size):
         (maxcol, maxrow) = size
-
+    
         middle, top, bottom = self.calculate_visible(
             (maxcol,maxrow), True)
         if middle is None: return 'up'
@@ -832,7 +834,7 @@ class ListBox(BoxWidget):
                 
     def _keypress_down(self, size):
         (maxcol, maxrow) = size
-
+    
         middle, top, bottom = self.calculate_visible(
             (maxcol,maxrow), True)
         if middle is None: return 'down'
@@ -842,7 +844,7 @@ class ListBox(BoxWidget):
         
         row_offset = focus_row_offset + focus_rows
         rows = focus_rows
-
+    
         # look for selectable widget below
         pos = focus_pos
         widget = None

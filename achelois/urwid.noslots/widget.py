@@ -75,9 +75,6 @@ class WidgetMeta(MetaSuper, signals.MetaSignals):
     """
     def __init__(cls, name, bases, d):
         no_cache = d.get("no_cache", [])
-        #try: no_cache = d.no_cache
-        #except AttributeError:
-            #no_cache = []
         
         super(WidgetMeta, cls).__init__(name, bases, d)
 

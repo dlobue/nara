@@ -522,6 +522,10 @@ class read_box(ListBox):
         self.change_focus(self.__size, top_idx, top_offset)
         self.set_focus(cur_focus)
 
+    def change_focus(self, size, position, offset_inset = 0, coming_from = None, cursor_coords = None, snap_rows = None):
+        emit_signal(eband, 'log', 'size: %s\npos: %s\nrow_offset: %s' % (str(size), position, offset_inset))
+        return self.__super.change_focus(size, position, offset_inset, coming_from, cursor_coords, snap_rows)
+
     def yank(self, size=None):
         emit_signal(eband, 'log', str(self.__size))
         emit_signal(eband, 'log', str(self.offset_rows))

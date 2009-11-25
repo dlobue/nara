@@ -174,7 +174,149 @@ class index_walker(ListWalker, MetaMixin):
         #if len(to_join): self._modified()
         #return
 
-class conv_widget(MetaMixin, ScrollMixin, WidgetWrap):
+class conv_widget_text(MetaMixin, ScrollMixin, WidgetWrap):
+    __slots__ = ('_conv')
+    #__slots__ = ('_conv', '_urwid_signals')
+    signals = ['keypress', 'modified']
+    ignore_focus = False
+    context = 'index_mode'
+    
+    def __init__(self):
+        txt = "Loading"
+        w = Text(txt, wrap='clip')
+        w = AttrWrap(w, 'index notfocus',
+                     {None: 'index focus',
+                      'index notfocus': 'index focus',
+                      'index new': 'index new focus',
+                      'index read': 'index read focus',
+                      'index starred': 'index starred focus',
+                      'index label': 'index label focus',
+                      'index sample': 'index sample focus'
+                     }
+                    )
+        self.__super.__init__(w)
+
+    def _init(self, conv):
+        conv._wcallback = ref(self.update)
+        #register_signal(conv, 'modified')
+        #connect_signal(conv, 'modified', self.update)
+        self._conv = conv
+        self.update()
+
+    def selectable(self): return True
+
+    def idx_repr(self):
+        def chk_new(x):
+            if 'S' in x.flags: return False
+            return True
+
+        tot_new = len(filter(chk_new, self._conv.messages))
+        if tot_new:
+            tstat = 'new'
+        else:
+            tstat = 'read'
+
+        now = datetime.now()
+        ddate = self._conv.last_update
+        if now.date() == ddate.date():
+            rep_date = ddate.strftime('%X')
+        elif now.year > ddate.year:
+            rep_date = ddate.strftime('%y %b %d')
+        else:
+            yest = now - timedelta(days=1)
+            if yest.date() == ddate.date():
+                rep_date = ddate.strftime('Yest %X')
+            else:
+                rep_date = ddate.strftime('%b %d')
+
+        ddate = ('index new', ' {0:>10}'.format(rep_date))
+
+        dsender = filter(chk_new, self._conv.messages)[:3]
+        idx = None
+        if tot_new < 3:
+            if tot_new == 0: idx = -1
+            dsender.extend(self._conv.messages[-(3 - tot_new):])
+
+        if idx is None:
+            isender = iter(dsender)
+            while 1:
+                try: oldest_new = isender.next()
+                except StopIteration: break
+                if 'S' not in oldest_new.flags: break
+        else:
+            oldest_new = dsender[idx]
+
+        dsubject = ('index %s' % tstat, ' %s' % oldest_new.get('subject',[''])[0])
+        dpreview = ('index sample', ' %s' % ' '.join(oldest_new.get('sample',[''])[0].split()))
+
+        sendmarkup = []
+        c=0
+        w=25
+        break_early = False
+        for x in dsender:
+            if 'S' not in x.flags: stat = 'new'
+            else: stat = 'read'
+            fname = x.sender[0].split()[0].strip('"')
+            if '@' in fname: fname = fname.split('@')[0]
+            fname = ' %s,' % fname
+            l=len(fname)
+            charsleft = (w-c)
+            if (c+l) >= w:
+                fname = fname.strip(',')
+                fname = fname[:charsleft]
+                break_early = True
+            c+=l
+            sendmarkup.append(('index %s' % stat, fname))
+            if break_early: break
+
+        if not break_early:
+            last_sender = sendmarkup.pop()
+            attr, fname = last_sender
+            fname = fname.strip(',')
+            fname = fname.ljust(charsleft)
+            sendmarkup.append((attr, fname))
+
+        dcontained = ('index %s' % tstat, ' {0!s:^5}'.format(len(self._conv.messages)))
+        dlabels = ('index label', ' %s' % ' '.join(map(lambda x: '+%s' % x, self._conv.labels)))
+        if dlabels[1] == ' ':
+            dlabels = ' '
+
+        return [ddate, sendmarkup, dcontained, dsubject, dlabels, dpreview]
+
+    def update(self):
+        self.set_text( self.idx_repr() )
+        self._invalidate()
+        emit_signal(self, 'modified')
+
+    def set_text(self, markup):
+        #def privatize_txt(x):
+            #    if type(x) is list:
+                #        return map(privatize_txt, x)
+                #    if type(x) is tuple and len(x) == 2:
+                    #        return (x[0], x[1].translate(anonitext))
+        return self._w.original_widget.set_text(markup)
+
+    def do_activate(self, size, key):
+        try: buffer_manager.set_buffer(self._conv)
+        except TypeError:
+            buffer_manager.register_support(self._conv, read_box)
+            buffer_manager.set_buffer(self._conv)
+
+    def do_nomap(self, size, key):
+        return key
+
+    def _keypress(self, (maxcol,), key):
+        if key in ('r', 'e'):
+            emit_signal(self, 'keypress', key)
+            return key
+        elif key not in (' ','enter'):
+            return key
+        try: buffer_manager.set_buffer(self._conv)
+        except TypeError:
+            buffer_manager.register_support(self._conv, read_box)
+            buffer_manager.set_buffer(self._conv)
+
+class conv_widget_columns(MetaMixin, ScrollMixin, WidgetWrap):
     __slots__ = ('_conv')
     #__slots__ = ('_conv', '_urwid_signals')
     signals = ['keypress', 'modified']
@@ -348,6 +490,8 @@ class conv_widget(MetaMixin, ScrollMixin, WidgetWrap):
         except TypeError:
             buffer_manager.register_support(self._conv, read_box)
             buffer_manager.set_buffer(self._conv)
+
+conv_widget = conv_widget_columns
 
 class sigthread_container(thread_container):
     __slots__ = ()

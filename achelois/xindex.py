@@ -8,7 +8,7 @@ from threading import Thread
 from operator import itemgetter
 from types import GeneratorType
 import cPickle
-from sys import path
+from os import path
 
 from datetime import datetime
 
@@ -232,9 +232,9 @@ def modify_factory(id_data_tples, modify_callback, all_new=False):
     """
     print '%s - building tuples' % datetime.now()
     if all_new:
-        #__docs = threadmap.map(lambda x: (make_doc(x[0]), x[1]), id_data_tples )
+        __docs = forkmap.map(lambda x: (make_doc(x[0]), x[1]), id_data_tples )
         #__docs = forkmap.map(lambda x: (make_doc(x[0]), x[1]), id_data_tples )
-        __docs = ( (make_doc(muuid), data) for muuid,data in id_data_tples )
+        #__docs = ( (make_doc(muuid), data) for muuid,data in id_data_tples )
     else:
         #__docs = threadmap.map(lambda x: (_get_doc(x[0]), x[1]), id_data_tples )
         #__docs = forkmap.map(lambda x: (_get_doc(x[0]), x[1]), id_data_tples )

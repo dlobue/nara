@@ -11,6 +11,11 @@ from achelois.lib.message_machine import msg_machine
 from achelois.lib.metautil import MetaMixin, MetaSupSig, ScrollMixin
 from achelois import offlinemaildir
 from achelois.lib import threadmap, forkmap
+from mailutils import set_read, set_unread
+from xindex import modify_factory, remove_fields, update_existing, replace_existing, xconn
+from lib.async import Async
+
+async = Async(Thread)
 
 #from string import ascii_lowercase, digits, maketrans
 #anonitext = maketrans(ascii_lowercase + digits, 'x'*26 + '7'*len(digits))
@@ -104,17 +109,21 @@ class text_select(MetaMixin, ScrollMixin, WidgetWrap):
         return self._w.original_widget.pack(*args, **kwargs)
 
 class machined_widget(text_select):
-    __slots__ = ('state', '_detail', 'expanded', 'new')
+    __slots__ = ('state', '_detail', 'expanded', '_parent')
     context = 'read_mode'
-    def __init__(self, data, new):
+    def __init__(self, data, parent):
         __state, __detail = data
         self.state = __state
         self._detail = __detail
-        self.new = new
+        self._parent = parent
         self.expanded = fold_guide[__state][0] # some widgets should be open by default, others not
 
         self.__super.__init__()
         self.update_widget()
+
+    @property
+    def new(self):
+        return self._parent().new
 
     def do_toggle_expanded(self, (maxcol,), key):
         if self.state == 'MSG': return self._kemit((maxcol,), key)
@@ -169,7 +178,7 @@ class collapser_blank(text_select):
 
 
 class collapser(MetaMixin, ScrollMixin):
-    __slots__ = ('expanded', 'detailed', 'label', '_cache', '_urwid_signals', '__weakref__', 'new', 'spacer')
+    __slots__ = ('expanded', 'detailed', 'label', '_cache', '_urwid_signals', '__weakref__', 'spacer')
     __metaclass__ = MetaSupSig
     signals = ['focus_modify']
     context = 'read_mode'
@@ -313,16 +322,21 @@ class collapser(MetaMixin, ScrollMixin):
         list.append(self._cache, data)
 
 class group_state(collapser):
-    __slots__ = ()
-    def __init__(self, data, new):
+    __slots__ = ('_parent')
+    def __init__(self, data, parent):
         self.__super.__init__()
         self._cache.append(data)
-        self.new = new
+        self._parent = parent
+        #self.new = new
         if self.state == 'MSG':
             del self.label
             self.label = self.spacer = collapser_blank('', 'blank', 'blank')
             #self.spacer = collapser_label('', 'blank', 'blank')
             self.expanded = True
+
+    @property
+    def new(self):
+        return self._parent().new
 
     @property
     def state(self):
@@ -392,8 +406,8 @@ class message_widget(collapser):
         self.__super.__init__()
         self.msgobj = msgobj
         self._state_order = {}
-        if 'S' in msgobj.get('flags', ''): self.new = False
-        else: self.new = True
+        #if 'S' in msgobj.get('flags', ''): self.new = False
+        #else: self.new = True
 
         __msg_get = mymail.get(msgobj.muuid())
         __processed = msg_machine.process(__msg_get)
@@ -404,15 +418,15 @@ class message_widget(collapser):
         #else: self._change_expanded(False)
 
         def fadd(p):
-            try: self._cache[self._state_order[p[0]]].append(machined_widget(p, self.new))
+            try: self._cache[self._state_order[p[0]]].append(machined_widget(p, ref(self)))
             except KeyError:
                 self._state_order[p[0]] = len(self._state_order)
                 return fadd(p)
             except IndexError: 
                 #try: self._cache.append(group_state(machined_widget(p)))
-                try: self._cache[self._state_order[p[0]]] = group_state(machined_widget(p, self.new), self.new)
+                try: self._cache[self._state_order[p[0]]] = group_state(machined_widget(p, ref(self)), ref(self))
                 except:
-                     self._cache.append(group_state(machined_widget(p, self.new), self.new))
+                     self._cache.append(group_state(machined_widget(p, ref(self)), ref(self)))
                      #raise ValueError('data: %s\nstate_order: %s\ncache: %s' % (str(p), str(self._state_order), str(self._cache)))
 
         map(fadd, __processed)
@@ -422,6 +436,38 @@ class message_widget(collapser):
         #try: self._cache[self._state_order['MSG']].append(collapser_label('\n', 'blank', 'blank'))
         #except: pass
         #self._cache[-1].append(collapser_label('\n\n', 'blank', 'blank'))
+
+    @property
+    def new(self):
+        if 'S' in self.msgobj.get('flags', ''): 
+            return False
+        else:
+            return True
+
+    @new.setter
+    def new(self, new):
+        if type(new) is not bool: raise TypeError("The heck you think you're doing? msg.new can be True or False, not type %s with value %s" % (str(type(new)), str(new)))
+        if new:
+            id_dat_tple = set_unread(self.msgobj.muuid())
+            emit_signal(eband, 'log', str(id_dat_tple))
+            if id_dat_tple:
+                docs = modify_factory([id_dat_tple], remove_fields)
+                map(xconn.replace, docs)
+                xconn.flush()
+
+            if self.new: return
+            #else: set_unread(self.msgobj.muuid())
+            else: self.msgobj.flags.remove('S')
+        else:
+            id_dat_tple = set_read(self.msgobj.muuid())
+            emit_signal(eband, 'log', str(id_dat_tple))
+            if id_dat_tple:
+                docs = modify_factory([id_dat_tple], update_existing)
+                map(xconn.replace, docs)
+                xconn.flush()
+
+            if not self.new: return
+            self.msgobj.flags.append('S')
 
     def auto_text(self):
         if self.new: stat = 'new'
@@ -458,6 +504,25 @@ class message_widget(collapser):
         lines = self.label.pack()
         emit_signal(eband, 'log', '%s' % str(lines))
 
+    def top_down_rerender(self):
+        def func(x):
+            try: map(lambda y: y.update_widget(), x._cache)
+            except: pass
+        map(func, self._cache)
+        map(lambda x: x.update_widget(), self._cache)
+
+    def do_set_read(self, (maxcol,), key):
+        emit_signal(eband, 'log', 'in do_set_read, new was %s' % str(self.new))
+        self.new = False
+        self.top_down_rerender()
+        self.update_widget()
+
+    def do_set_unread(self, (maxcol,), key):
+        emit_signal(eband, 'log', 'in do_set_unread, new was %s' % str(self.new))
+        self.new = True
+        self.top_down_rerender()
+        self.update_widget()
+
     def do_msg_set_expanded(self, *args, **kwargs): return self._do_set_expanded(*args, **kwargs)
     def do_msg_toggle_expanded(self, *args, **kwargs): return self._do_toggle_expanded(*args, **kwargs)
     def do_msg_open_expanded(self, *args, **kwargs): return self._do_open_expanded(*args, **kwargs)
@@ -493,6 +558,7 @@ class message_widget(collapser):
 class read_box(ListBox):
     __slots__ = ('_urwid_signals', '__size', '_last_top')
     signals = ['modified', 'yank']
+    _snap = True
     def __init__(self, convobj):
         self.__size = None
         w = read_walker(convobj, self)
@@ -522,9 +588,9 @@ class read_box(ListBox):
         self.change_focus(self.__size, top_idx, top_offset)
         self.set_focus(cur_focus)
 
-    def change_focus(self, size, position, offset_inset = 0, coming_from = None, cursor_coords = None, snap_rows = None):
-        emit_signal(eband, 'log', 'size: %s\npos: %s\nrow_offset: %s' % (str(size), position, offset_inset))
-        return self.__super.change_focus(size, position, offset_inset, coming_from, cursor_coords, snap_rows)
+    #def change_focus(self, size, position, offset_inset = 0, coming_from = None, cursor_coords = None, snap_rows = None):
+        #    emit_signal(eband, 'log', 'size: %s\npos: %s\nrow_offset: %s' % (str(size), position, offset_inset))
+        #    return self.__super.change_focus(size, position, offset_inset, coming_from, cursor_coords, snap_rows)
 
     def yank(self, size=None):
         emit_signal(eband, 'log', str(self.__size))
@@ -575,7 +641,7 @@ class read_walker(ListWalker, MetaMixin):
         self._emit('focus_modify', mthd, status)
 
     def _focus_modify(self, restore=False):
-        emit_signal(eband, 'log', 'doing focus modifier')
+        #emit_signal(eband, 'log', 'doing focus modifier')
         if restore:
             return self._listbox().restore_top()
             #return self._listbox().set_focus(self._last_focus)
@@ -598,34 +664,56 @@ class read_walker(ListWalker, MetaMixin):
         return self._listbox().set_focus(beg_focus)
 
     def do_yank(self, (maxcol,), key):
-        emit_signal(self, 'yank', (maxcol,))
+        #emit_signal(self, 'yank', (maxcol,))
+        #self.find_next_new()
+        self.collapse_read()
+
+    def expand_all(self):
+        map(lambda x: x._change_expanded(True), self._cache)
+
+    def collapse_all(self):
+        convpos, msgpos, statepos = self.focus
+        def func((idx, msg)):
+            if idx != convpos:
+                msg._change_expanded(False)
+
+        map(func, enumerate(self._cache))
+
+    def collapse_read(self):
+        convpos, msgpos, statepos = self.focus
+        def func((idx, msg)):
+            if not msg.new and idx != convpos:
+                msg._change_expanded(False)
+
+        map(func, enumerate(self._cache))
 
     def find_oldest_new(self):
-        return self.find_next_new(start_from=(0,0,0))
-        
+        self.find_next_new(start_from=(-1,0,0))
+
     def find_next_new(self, start_from=None):
         if start_from: convpos, msgpos, statepos = start_from
-        else: convpos, msgpos, statepos = self.focus
-        if convpos > 0: convpos += 1
+        else:
+            convpos, msgpos, statepos = self.focus
+        convpos += 1
         for __w in self._cache[convpos:]:
             if __w.expanded: break
-        __w._change_detailed(True)
+        try: __w._change_detailed(True)
+        except UnboundLocalError: return
         convpos = self._cache.index(__w)
-        return self.set_focus((convpos, 0, 0))
+        #self._listbox().set_focus_valign(('fixed top', 0))
+        self.set_focus((convpos, 0, 0), ('fixed top', 0))
 
     def get_next_msg(self):
         convpos, msgpos, statepos = self.focus
-        convpos, msgpos, statepos = convpos+1, 0, 0
-        try: return self._cache[convpos][msgpos][statepos], (convpos, msgpos, statepos)
-        except IndexError: return None, None
-        #except IndexError: return None, (None, None, None)
+        if convpos < (len(self._cache)-1):
+            convpos += 1
+            self.set_focus((convpos, 0, 0), ('fixed top', 0))
 
     def get_prev_msg(self):
         convpos, msgpos, statepos = self.focus
-        convpos, msgpos, statepos = convpos-1, 0, 0
-        try: return self._cache[convpos][msgpos][statepos], (convpos, msgpos, statepos)
-        except IndexError: return None, None
-        #except IndexError: return None, (None, None, None)
+        if convpos > 0:
+            convpos -= 1
+            self.set_focus((convpos, 0, 0), ('fixed top', 0))
 
     def do_find_oldest_new(self, *args, **kwargs):
         self.find_oldest_new(self, *args, **kwargs)
@@ -643,9 +731,11 @@ class read_walker(ListWalker, MetaMixin):
             return self.get_next(self.focus)
         return __w, self.focus
 
-    def set_focus(self, focus):
+    def set_focus(self, focus, valign=None):
         convpos, msgpos, statepos = focus
         self.focus = convpos, msgpos, statepos
+        if valign:
+            self._listbox().set_focus_valign(valign)
         self._modified()
 
     def get_next(self, start_from):
@@ -664,7 +754,6 @@ class read_walker(ListWalker, MetaMixin):
                     return mdef(convpos+1, 0, 1)
                 except IndexError:
                     return None, None
-                #return None, (None, None, None)
 
     def get_prev(self, start_from):
         convpos, msgpos, statepos = start_from
@@ -688,7 +777,6 @@ class read_walker(ListWalker, MetaMixin):
             if msgpos == 0:
                 if convpos == 0:
                     return None, None
-                #return None, (None, None, None)
                 return mdef(convpos-1, -1, -1)
             return mdef(convpos, msgpos-1, -1)
         try: return mdef(convpos, msgpos, statepos-1)

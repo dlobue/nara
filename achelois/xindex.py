@@ -18,7 +18,7 @@ from settings import settingsdir
 from lib.metautil import Singleton, MetaSuper
 from databasics import msg_fields, msg_container, msg_factory, lazythread_container, conv_factory
 
-from lib import threadmap, forkmap
+from lib import threadmap, forkmap, exc
 
 #srchidx = 'xap.idx'
 srchidx = xapidx
@@ -47,24 +47,29 @@ class XapProxy(Singleton):
             return self._idxconn.process(doc)
 
     def worker(self):
+        def shutdown():
+            self._idxconn.flush()
+            try: sconn.reopen()
+            except: pass
+            self._idxconn.close()
+            self.thread_started = False
+            self.indexer_started = False
         while 1:
             try: job = self._queue.get(True, 30)
             except Empty:
-                self._idxconn.flush()
-                try: sconn.reopen()
-                except: pass
-                self._idxconn.close()
-                self.thread_started = False
-                self.indexer_started = False
+                shutdown()
                 break
             task, args, kwargs = job
             getattr(self._idxconn, task)(*args, **kwargs)
 
+            self._queue.task_done()
             if task == 'flush':
                 print "%s - processing flush now" % datetime.now()
                 try: sconn.reopen()
                 except: pass
-            self._queue.task_done()
+                if self._queue.empty():
+                    shutdown()
+                    break
 
     def thread_init(self):
         if not self.thread_started:
@@ -256,7 +261,9 @@ def remove_fields(doc_data_tples):
     return __docs
 
 def _remove_fields(doc, fields):
-    map(doc.clear_field, fields)
+    try: map(doc.clear_field, fields)
+    except:
+        print exc.format_exc_info()
     return doc
 
 def replace_existing(doc_data_tples):

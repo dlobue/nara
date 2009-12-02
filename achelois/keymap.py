@@ -35,6 +35,8 @@ default = {
         'close_detailed': ['c'],
         'num_rows': ['n'],
         'yank': ['y'],
+        'set_read': ['u'],
+        'set_unread': ['U'],
         },
     'index_mode': {
         'all_threads': ['L'],

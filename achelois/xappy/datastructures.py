@@ -197,6 +197,9 @@ class ProcessedDocument(object):
         Removes search term given from specified field.
         """
         __prefix = self._fieldmappings.get_prefix(field)
+        if len(term) > 0:
+            if ord(term[0]) >= ord('A') and ord(term[0]) <= ord('Z'):
+                __prefix = __prefix + ':'
         #return self._doc.remove_term('%s%s' % (__prefix, term))
         try:
             return self._doc.remove_term('%s%s' % (__prefix, term))

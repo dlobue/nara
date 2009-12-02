@@ -9,6 +9,7 @@ import urwid
 from urwid import CanvasCache
 from buffer import buffer_manager
 from collections import deque
+import sys
 
 import xappy
 
@@ -24,6 +25,16 @@ class info_log(urwid.ListBox): pass
 class info_log_list(deque):
     def __hash__(self): return id(self)
 
+class console_out(object):
+    def write(self, txt):
+        addLine(('stdout', txt.strip()))
+class console_error(object):
+    def write(self, txt):
+        addLine(('stderr', txt.strip()))
+
+
+sys.stdout = console_out()
+#sys.stderr = console_error()
 
 keymap_alias = {'k':'up', 'j':'down', 'h':'left', 'l':'right', 'J':'page down', 'K':'page up'}
 
@@ -58,6 +69,8 @@ palette = [
             ('index starred focus', 'yellow', 'dark cyan', ('bold')),
             ('index label focus', 'brown', 'dark cyan', ('bold')),
             ('index sample focus', 'light cyan', 'dark cyan', ('bold')),
+            ('stdout', 'dark cyan', 'black'),
+            ('stderr', 'light red', 'black'),
             ]
 
 

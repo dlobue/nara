@@ -219,9 +219,23 @@ def _ensure_threading_integrity(threader=None, all_new=False):
     print "in update queue  %i" % len(to_update)
     print "in replace queue %i" % len(to_replace)
     print '%s - starting modify factory on to_update' % datetime.now()
-    docs = modify_factory(to_update, update_existing, all_new)
+    docs1 = modify_factory(to_update, update_existing, all_new)
     print '%s - starting modify factory on to_replace' % datetime.now()
-    docs.extend( modify_factory(to_replace, replace_existing, all_new) )
+    #docs.extend( modify_factory(to_replace, replace_existing, all_new) )
+    docs2 = modify_factory(to_replace, replace_existing, all_new)
+    def chn_gen(gg):
+        it = gg.next()
+        while 1:
+            try: r = it.next()
+            except StopIteration:
+                try:
+                    it = gg.next()
+                    continue
+                except StopIteration:
+                    break
+            yield r
+
+    docs = chn_gen( (x for x in [docs1, docs2]) )
     return docs
 
 def modify_factory(id_data_tples, modify_callback, all_new=False):

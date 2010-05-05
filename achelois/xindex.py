@@ -423,10 +423,13 @@ if __name__ == '__main__':
         xconn.indexer_init()
         sconn = xappy.SearchConnection(srchidx)
     import time
+    import cgitb
+    cgitb.enable(format="text")
     print 'iterating through mail and creating msg_containers'
     t = time.time()
     #all_rmsgs = [ msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() ]
-    all_msgs = forkmap.map(msg_factory, mail_grab.iteritems())
+    all_msgs = [ msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() ]
+    #all_msgs = forkmap.map(msg_factory, mail_grab.iteritems())
     #t = time.time() - t
     #print "done! took %r seconds" % t
     #print 'all_rmsgs %i' % len(all_msgs)

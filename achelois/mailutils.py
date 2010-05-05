@@ -7,8 +7,6 @@ import time
 def set_read(muuid):
     emit_signal(eband, 'log', 'doing set_read on muuid %s' % muuid)
     msg = mail_grab.get(muuid)
-    #emit_signal(eband, 'log', 'msg type is %s' % str(type(msg)))
-    #emit_signal(eband, 'log', 'msg has these attributes:\n%s' % '\n'.join(dir(msg)))
     subdir = msg.get_subdir()
     if subdir == 'new':
         msg.set_subdir('cur')
@@ -26,8 +24,6 @@ def set_read(muuid):
 def set_unread(muuid):
     emit_signal(eband, 'log', 'doing set_unread on muuid %s' % muuid)
     msg = mail_grab.get(muuid)
-    #emit_signal(eband, 'log', 'msg type is %s' % str(type(msg)))
-    #emit_signal(eband, 'log', 'msg has these attributes:\n%s' % '\n'.join(dir(msg)))
     subdir = msg.get_subdir()
     if subdir == 'new':
         msg.set_subdir('cur')

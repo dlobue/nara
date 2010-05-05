@@ -5,6 +5,9 @@ import time
 
 
 def set_read(muuid):
+    """
+    Set the Seen flag in the index as well as on the filesystem.
+    """
     emit_signal(eband, 'log', 'doing set_read on muuid %s' % muuid)
     msg = mail_grab.get(muuid)
     subdir = msg.get_subdir()
@@ -22,6 +25,9 @@ def set_read(muuid):
     return None
 
 def set_unread(muuid):
+    """
+    Remove the seen flag both from the xapian index and from the filesystem.
+    """
     emit_signal(eband, 'log', 'doing set_unread on muuid %s' % muuid)
     msg = mail_grab.get(muuid)
     subdir = msg.get_subdir()

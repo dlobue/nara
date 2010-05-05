@@ -20,7 +20,6 @@ from lib import threadmap, forkmap
 #from string import ascii_lowercase, digits, maketrans
 #anonitext = maketrans(ascii_lowercase + digits, 'x'*26 + '7'*len(digits))
 
-#srchidx = 'xap.idx'
 srchidx = xapidx
 
 class index_box(ListBox):
@@ -374,11 +373,11 @@ class conv_widget_columns(MetaMixin, ScrollMixin, WidgetWrap):
     def selectable(self): return True
 
     def idx_repr(self):
-        def chk_new(x):
+        def is_new(x):
             if 'S' in x.flags: return False
             return True
 
-        tot_new = len(filter(chk_new, self._conv.messages))
+        tot_new = len(filter(is_new, self._conv.messages))
         if tot_new:
             tstat = 'new'
         else:
@@ -400,11 +399,12 @@ class conv_widget_columns(MetaMixin, ScrollMixin, WidgetWrap):
         ddate = ('index new', str(rep_date))
         #ddate = ('index new', ' {0:>10}'.format(rep_date))
 
-        dsender = filter(chk_new, self._conv.messages)[:3]
+        dsender = filter(is_new, self._conv.messages)[:3]
         idx = None
         if tot_new < 3:
             if tot_new == 0: idx = -1
-            dsender.extend(self._conv.messages[-(3 - tot_new):])
+            dsender.extend(filter(lambda x: not is_new(x),
+                                    self._conv.messages[-(3 - tot_new):]))
 
         if idx is None:
             isender = iter(dsender)

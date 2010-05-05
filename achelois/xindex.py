@@ -215,9 +215,23 @@ def _ensure_threading_integrity(threader=None, all_new=False):
     print "in update queue  %i" % len(to_update)
     print "in replace queue %i" % len(to_replace)
     print '%s - starting modify factory on to_update' % datetime.now()
-    docs = modify_factory(to_update, update_existing, all_new)
+    docs1 = modify_factory(to_update, update_existing, all_new)
     print '%s - starting modify factory on to_replace' % datetime.now()
-    docs.extend( modify_factory(to_replace, replace_existing, all_new) )
+    #docs.extend( modify_factory(to_replace, replace_existing, all_new) )
+    docs2 = modify_factory(to_replace, replace_existing, all_new)
+    def chn_gen(gg):
+        it = gg.next()
+        while 1:
+            try: r = it.next()
+            except StopIteration:
+                try:
+                    it = gg.next()
+                    continue
+                except StopIteration:
+                    break
+            yield r
+
+    docs = chn_gen( (x for x in [docs1, docs2]) )
     return docs
 
 def modify_factory(id_data_tples, modify_callback, all_new=False):
@@ -233,9 +247,9 @@ def modify_factory(id_data_tples, modify_callback, all_new=False):
     """
     print '%s - building tuples' % datetime.now()
     if all_new:
-        __docs = forkmap.map(lambda x: (make_doc(x[0]), x[1]), id_data_tples )
         #__docs = forkmap.map(lambda x: (make_doc(x[0]), x[1]), id_data_tples )
-        #__docs = ( (make_doc(muuid), data) for muuid,data in id_data_tples )
+        #__docs = forkmap.map(lambda x: (make_doc(x[0]), x[1]), id_data_tples )
+        __docs = ( (make_doc(muuid), data) for muuid,data in id_data_tples )
     else:
         #__docs = threadmap.map(lambda x: (_get_doc(x[0]), x[1]), id_data_tples )
         #__docs = forkmap.map(lambda x: (_get_doc(x[0]), x[1]), id_data_tples )
@@ -244,7 +258,8 @@ def modify_factory(id_data_tples, modify_callback, all_new=False):
     print '%s - running callback modifier' % datetime.now()
     __docs = modify_callback(__docs)
     print '%s - extracting docs' % datetime.now()
-    __docs = threadmap.map(itemgetter(0), __docs)
+    #__docs = threadmap.map(itemgetter(0), __docs)
+    __docs = (x[0] for x in __docs)
     return __docs
 
 def remove_fields(doc_data_tples):
@@ -284,9 +299,9 @@ def update_existing(doc_data_tples):
         map(per_field, data_tples)
         return doc
 
-    __docs = threadmap.map(lambda x: (per_doc(x[0], x[1]), x[1]), doc_data_tples )
+    #__docs = threadmap.map(lambda x: (per_doc(x[0], x[1]), x[1]), doc_data_tples )
     #__docs = threadmap.map(lambda doc,data_tples: (per_doc(doc, data_tples), data_tples), doc_data_tples )
-    #__docs = ( (per_doc(doc, data_tples), data_tples) for doc,data_tples in doc_data_tples )
+    __docs = ( (per_doc(doc, data_tples), data_tples) for doc,data_tples in doc_data_tples )
     return __docs
 
 def modify_existing(id_data_tples, field, value=None, termadd=True, dataadd=None):
@@ -295,8 +310,10 @@ def modify_existing(id_data_tples, field, value=None, termadd=True, dataadd=None
     muuid = message universally unique identifier
     data = data to index
     """
-    __moddocs = [ _modify_existing(muuid, field, data, value, termadd, dataadd) for muuid,data in id_data_tples ]
-    __moddocs = [ __x.prepare() for __x in __moddocs ]
+    #__moddocs = [ _modify_existing(muuid, field, data, value, termadd, dataadd) for muuid,data in id_data_tples ]
+    #__moddocs = [ __x.prepare() for __x in __moddocs ]
+    __moddocs = ( _modify_existing(muuid, field, data, value, termadd, dataadd) for muuid,data in id_data_tples )
+    __moddocs = ( __x.prepare() for __x in __moddocs )
     map(xconn.replace, __moddocs)
     xconn.flush()
 
@@ -322,9 +339,9 @@ def _content_parse(muuid):
     if not msg.is_multipart():
         __content = msg.get_payload(decode=True)
     else:
-        __content = [m.get_payload(decode=True) for m in \
+        __content = (m.get_payload(decode=True) for m in \
                         typed_subpart_iterator(msg, 'text', 'plain') \
-                        if 'filename' not in m.get('Content-Disposition','')]
+                        if 'filename' not in m.get('Content-Disposition',''))
         __content = ' '.join(__content)
     return __content
 
@@ -452,12 +469,12 @@ if __name__ == '__main__':
     print "done! took %r seconds" % t
     print "pickling results"
     t = time.time()
-    finwork = path.join(settingsdir, 'preprocess.pickle')
-    try:
-        with open(finwork, 'wb') as f:
-            cPickle.dump(docs, f)
-    except:
-        pass
+    #finwork = path.join(settingsdir, 'preprocess.pickle')
+    #try:
+        #with open(finwork, 'wb') as f:
+            #cPickle.dump(docs, f)
+            #except:
+                #pass
     t = time.time() - t
     print "done! took %r seconds" % t
     #print 'processing docs'

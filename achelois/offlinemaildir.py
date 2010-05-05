@@ -11,22 +11,28 @@ settings = get_settings()
 
 
 class mail_sources(list):
+    """
+    This object is a hacky way to not have to remember the source or path to an email.
+    It condenses all maildir sources into one place. Given a a maildir id, it tries every maildir
+    it has been told about until it finally finds a source that has an email with the maildir id we're
+    asking after, or runs out of sources.
+
+    This will need to be reworked eventually as two emails with the same maildir id will cause the second
+    email to never be accessible.
+    """
     def __init__(self):
         maildirinc_list = [os.path.join(settings['rdir'], x) for x in settings['maildirinc']]
         maild_list = [mailbox.Maildir(x, factory=mailbox.MaildirMessage, create=False) for x in maildirinc_list]
         self._pthread = Thread
-        #def _thread(x):
-            #__current = self._pthread(target=x._refresh, args=())
-            #__current.start()
-            #return __current
 
-        #[_thread(x) for x in maild_list]
-        #__tojoin = [_thread(x) for x in maild_list]
-        #[x.join() for x in __tojoin]
         self.extend(maild_list)
         self.refresh()
 
     def refresh(self):
+        '''
+        refresh all sources to look for new emails.
+        And do every source in a separate thread so we aren't kept waiting.
+        '''
         map(self._thread, self)
 
     def _thread(self, x, y='_refresh', z=None):
@@ -37,6 +43,10 @@ class mail_sources(list):
         __current.start()
 
     def get(self, key):
+        '''
+        try every source until we find one that has the message id we're looking for.
+        return the message when found.
+        '''
         for source in self:
             try: value = source.get_message(key)
             except: pass
@@ -44,6 +54,9 @@ class mail_sources(list):
                 if value: return value
 
     def update(self, muuid, msg):
+        '''
+        push updated message back to source.
+        '''
         t = time.time()
         source = self.get_folder(muuid)
         t = time.time() - t
@@ -56,6 +69,10 @@ class mail_sources(list):
         #source.update
 
     def get_folder(self, muuid):
+        '''
+        search every source until we find a source that has the id we're looking for.
+        return the source found
+        '''
         for source in self:
             if source.has_key(muuid):
                 return source

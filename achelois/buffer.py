@@ -1,16 +1,8 @@
 from weakref import WeakValueDictionary
-#from weakkeyordereddict import WeakKeyOrderedDict
-#from ordereddict import OrderedDict
-#import urwid
 
 class buffer_manager(object):
-    #__metaclass__ = urwid.MetaSignals
-    #signals = ['log','buffer_update']
 
-    #_buffers = weakref.WeakKeyDictionary()
     _buffers = WeakValueDictionary()
-    #_buffers = WeakKeyOrderedDict()
-    #_buffers = OrderedDict()
     _rbufferobj = None
     _supported = {}
     _noremove = []
@@ -79,8 +71,6 @@ class buffer_manager(object):
 
     @classmethod
     def destroy(cls, data=None):
-        #urwid.Signals.emit(buffer_manager, 'log', 'deleting buffer %r' % cls._current)
-        #Screen.addLine2('deleting buffer %r' % cls._current)
         if not data:
             data = cls._current
             if data not in cls._noremove:
@@ -90,7 +80,6 @@ class buffer_manager(object):
                 for d in cls._buffers.iteritems():
                     if data in d:
                         __tmp.append(d[0])
-                #data.self_destruct()
                 map(lambda x: cls._buffers.__delitem__(x), __tmp)
                 del cls._order[cls._order.index(data)]
                 del data
@@ -99,7 +88,6 @@ class buffer_manager(object):
                 try:
                     cls.set_prev(data)
                     data._invalidate()
-                    #data.self_destruct()
                     del cls._order[cls._order.index(cls._buffers[data])]
                     del cls._buffers[data]
                 except: pass

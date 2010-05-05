@@ -1,26 +1,20 @@
-#!/usr/bin/python
-
 #observer pattern.. i think
 from overwatch import mail_grab, emit_signal, eband, MetaSignals, register_signal
-#from overwatch import mail_grab, eband, MetaSignals, Signals
 
 #system modules
 from collections import deque, namedtuple
 from operator import attrgetter
-from weakref import WeakValueDictionary, ref
+from weakref import WeakValueDictionary
 from bisect import insort_right
 from datetime import datetime
 from email.utils import parsedate
 from uuid import uuid4
 
 #other modules i need that aren't sys, and I didn't write
-from xappy.datastructures import ProcessedDocument, UnprocessedDocument
-from xappy.searchconnection import SearchResult
-import xappy
-from lib import threadmap, forkmap
+from lib import threadmap
 
 #lastly my tools
-from tools import unidecode_date, delNone, filterNone
+from tools import delNone, filterNone
 from lib.metautil import MetaSuper
 
 msg_fields = ('sent', 'sender', 'to', 'cc', 'subject', 'osubject', 'msgid', 'muuid', 'flags', 'labels', 'mtime', 'in_reply_to', 'references', 'sample', 'thread')
@@ -30,7 +24,7 @@ _msg_container = namedtuple('msg_container', msg_fields)
 _conv_container = namedtuple('conv_container', conv_fields)
 
 class prop_deque(deque):
-    __slots__ = ()
+    #__slots__ = ()
     def __call__(self):
         if len(self) == 1:
             return self[0]
@@ -155,7 +149,7 @@ def _conv_factory(msg):
     return (__nique_terms, __labels, __muuid, __thread, [msg])
 
 class msg_container(_msg_container):
-    __slots__ = ()
+    #__slots__ = ()
 
     def __getstate__(self):
         return dict((name, getattr(self, name)) for name in self.__slots__ if hasattr(self,name))
@@ -169,7 +163,7 @@ class msg_container(_msg_container):
             return alt
 
 class conv_container(object):
-    __slots__ = ('__weakref__', '_container', '_wcallback', '_urwid_signals')
+    #__slots__ = ('__weakref__', '_container', '_wcallback', '_urwid_signals')
     _factory_callback = staticmethod(_conv_factory)
 
     def __init__(self, *args, **kwargs):
@@ -221,7 +215,8 @@ class conv_container(object):
 
         self.nique_terms.update(dispose.nique_terms)
         self.labels.update(dispose.labels)
-        threadmap.map(do_insort,
+        #threadmap.map(do_insort,
+        map(do_insort,
                 filter(lambda x: x.muuid[0] not in self.muuids, dispose.messages))
         try: self._wcallback()()
         except: pass
@@ -285,7 +280,7 @@ class lazy_refmap(dict):
             raise KeyError("Item key %s references no longer exists." % key)
 
 class thread_container(list):
-    __slots__ = ('_map')
+    #__slots__ = ('_map')
     __metaclass__ = MetaSuper
     def __init__(self):
         #self._map = lazy_refmap(self, 'nique_terms')

@@ -137,15 +137,11 @@ def _set_field_actions(idxconn):
     idxconn.add_field_action('thread', xappy.FieldActions.COLLAPSE)
     #idxconn.add_field_action('thread', xappy.FieldActions.SORTABLE, type='string')
 
-    idxconn.set_max_mem_use(max_mem=256*1024*1024)
+    #idxconn.set_max_mem_use(max_mem=256*1024*1024)
 
     return idxconn
 
 xconn = XapProxy()
-try: sconn = xappy.SearchConnection(srchidx)
-except:
-    xconn.indexer_init()
-    sconn = xappy.SearchConnection(srchidx)
 
 def _preindex_thread(msgs):
     tracker = {}
@@ -405,6 +401,10 @@ def index_factory(msgs, ensure=False):
 
 
 if __name__ == '__main__':
+    try: sconn = xappy.SearchConnection(srchidx)
+    except:
+        xconn.indexer_init()
+        sconn = xappy.SearchConnection(srchidx)
     import time
     print 'iterating through mail and creating msg_containers'
     t = time.time()
@@ -454,7 +454,7 @@ if __name__ == '__main__':
     t = time.time()
     finwork = path.join(settingsdir, 'preprocess.pickle')
     try:
-        with open(finwork, 'rb') as f:
+        with open(finwork, 'wb') as f:
             cPickle.dump(docs, f)
     except:
         pass

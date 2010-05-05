@@ -1,16 +1,8 @@
 from weakref import WeakValueDictionary
-#from weakkeyordereddict import WeakKeyOrderedDict
-#from ordereddict import OrderedDict
-#import urwid
 
 class buffer_manager(object):
-    #__metaclass__ = urwid.MetaSignals
-    #signals = ['log','buffer_update']
 
-    #_buffers = weakref.WeakKeyDictionary()
     _buffers = WeakValueDictionary()
-    #_buffers = WeakKeyOrderedDict()
-    #_buffers = OrderedDict()
     _rbufferobj = None
     _supported = {}
     _noremove = []

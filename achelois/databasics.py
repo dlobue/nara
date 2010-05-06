@@ -17,11 +17,43 @@ from lib import threadmap
 from tools import delNone, filterNone
 from lib.metautil import MetaSuper
 
-msg_fields = ('sent', 'sender', 'to', 'cc', 'subject', 'osubject', 'msgid', 'muuid', 'flags', 'labels', 'mtime', 'in_reply_to', 'references', 'sample', 'thread')
-conv_fields = ('nique_terms', 'labels', 'muuids', 'thread', 'messages')
+#constants
+cstr_sent = intern('sent')
+cstr_sender = intern('sender')
+cstr_to = intern('to')
+cstr_cc = intern('cc')
+cstr_subject = intern('subject')
+cstr_osubject = intern('osubject')
+cstr_msgid = intern('msgid')
+cstr_muuid = intern('muuid')
+cstr_flags = intern('flags')
+cstr_labels = intern('labels')
+cstr_mtime = intern('mtime')
+cstr_in_reply_to = intern('in_reply_to')
+cstr_references = intern('references')
+cstr_sample = intern('sample')
+cstr_thread = intern('thread')
+cstr_nique_terms = intern('nique_terms')
+cstr_labels = intern('labels')
+cstr_muuids = intern('muuids')
+cstr_messages = intern('messages')
+cstr_last_update = intern('last_update')
+
+#msg_fields = ('sent', 'sender', 'to', 'cc', 'subject', 'osubject', 'msgid', 'muuid', 'flags', 'labels', 'mtime', 'in_reply_to', 'references', 'sample', 'thread')
+#conv_fields = ('nique_terms', 'labels', 'muuids', 'thread', 'messages')
+msg_fields = (cstr_sent, cstr_sender, cstr_to, cstr_cc, cstr_subject, cstr_osubject,
+              cstr_msgid, cstr_muuid, cstr_flags, cstr_labels, cstr_mtime,
+              cstr_in_reply_to, cstr_references, cstr_sample, cstr_thread)
+conv_fields = (cstr_nique_terms, cstr_labels, cstr_muuids, cstr_thread, cstr_messages)
 
 _msg_container = namedtuple('msg_container', msg_fields)
 _conv_container = namedtuple('conv_container', conv_fields)
+
+
+field_map = {cstr_sender: intern('From'), cstr_msgid: intern('Message-ID'), cstr_sent: intern('Date'),
+                    cstr_osubject: intern('Subject'), cstr_in_reply_to: intern('In-Reply-To')}
+field_map_blank = {}
+field_multis = {cstr_cc:',', cstr_to:',', cstr_flags:None, cstr_labels:None, cstr_references:None}
 
 class prop_deque(deque):
     #__slots__ = ()
@@ -72,26 +104,13 @@ def msg_factory(muuid, msg=None):
     Always working with data in the same format makes it easier to index it
     and write code to display it.
     '''
-    try:
-        muuid, msg = muuid.id, muuid.data
-    except AttributeError:
+    if not msg:
         try:
-            muuid, msg = muuid
-        except: pass
-
-
-    '''
-    if type(muuid) is xappy.searchconnection.SearchResult:
-        muuid, msg = muuid.id, muuid.data
-    elif type(muuid) is tuple:
-        muuid, msg = muuid
-    elif type(muuid) is ProcessedDocument:
-        muuid, msg = muuid.id, muuid.data
-    elif type(muuid) is SearchResult:
-        muuid, msg = muuid.id, muuid.data
-    elif type(muuid) is UnprocessedDocument:
-        muuid, msg = muuid.id, muuid.data
-        '''
+            muuid, msg = muuid.id, muuid.data
+        except AttributeError:
+            try:
+                muuid, msg = muuid
+            except: pass
 
     if not msg:
         msg = mail_grab.get(muuid)
@@ -106,17 +125,13 @@ def _msg_factory(muuid, msg):
     This does the actual work of pulling the information we care about
     out of the message containers we'll be working with.
     '''
-    field_map = {'sender': 'From', 'msgid': 'Message-ID', 'sent': 'Date',
-                    'osubject': 'Subject', 'in_reply_to': 'In-Reply-To'}
-    field_map_blank = {}
-    field_multis = {'cc':',', 'to':',', 'flags':None, 'labels':None, 'references':None}
-    @auto_deque
+    #@auto_deque
     def do_get(field):
         def do_multi(data):
             try: __x = filterNone(set(data.split(field_multis[field])))
             except AttributeError: __x = data
             try: __x.__iter__
-            except: return __x
+            except AttributeError: return __x
             else:
                 try: return [__i.strip() for __i in __x]
                 except AttributeError: return __x
@@ -126,17 +141,27 @@ def _msg_factory(muuid, msg):
 
         __data = msg.get(field_dict.get(field, field), [])
         if field_dict:
-            if field == 'subject': __data = stripSubject(__data)
-            elif field == 'sent': __data = datetime(*parsedate(__data)[:6])
-            elif field == 'muuid' and not __data: __data = muuid
+            if field is cstr_subject: __data = stripSubject(__data)
+            elif field is cstr_sent: __data = datetime(*parsedate(__data)[:6])
+            elif field is cstr_muuid and not __data: __data = muuid
             elif field in field_multis:
-                if field == 'flags': __data = [__x for __x in msg.get_flags()]
+                if field is cstr_flags: __data = [x for x in msg.get_flags()]
                 else: __data = do_multi(__data)
 
+        if field is not cstr_sent:
+            if hasattr(__data, '__iter__'):
+                __data = map(intern, __data)
+            else:
+                #elif field is not cstr_sent:
+                __data = intern(__data)
         return __data
-    #__data_m = map(do_get, msg_fields)
+        #try: return intern(__data)
+        #except TypeError:
+            #__data = map(intern, __data)
+            #return __data
+    __data_m = map(do_get, msg_fields)
     #__data_m = threadmap.map(do_get, msg_fields)
-    __data_m = (do_get(x) for x in msg_fields)
+    #__data_m = (do_get(x) for x in msg_fields)
     return __data_m
 
 def conv_factory(msg):
@@ -159,20 +184,20 @@ def _conv_factory(msg):
     '''
     This does the actual work pulling the unique information out of a message.
     '''
-    __muuid = prop_deque(msg.get('muuid', []))
+    __muuid = prop_deque(msg.get(cstr_muuid, []))
 
-    __msgid = set(msg.get('msgid', []))
-    __in_reply = set(msg.get('in_reply_to', []))
-    __refs = set(msg.get('references', []))
-    __subjects = set(msg.get('subject',[]))
+    __msgid = set(msg.get(cstr_msgid, []))
+    __in_reply = set(msg.get(cstr_in_reply_to, []))
+    __refs = set(msg.get(cstr_references, []))
+    __subjects = set(msg.get(cstr_subject,[]))
 
     __nique_terms = __msgid | __in_reply | __refs | __subjects
     delNone(__nique_terms)
 
-    __labels = set(msg.get('labels',[]))
+    __labels = set(msg.get(cstr_labels,[]))
     delNone(__labels)
 
-    __thread = msg.get('thread',[])
+    __thread = msg.get(cstr_thread,[])
     __thread = prop_deque(__thread)
     return (__nique_terms, __labels, __muuid, __thread, [msg])
 
@@ -198,8 +223,7 @@ class conv_container(object):
     '''
     Wrap the conv_container named tuple and add some needed methods.
     '''
-    __slots__ = ('__weakref__', '_container', '_wcallback', '_urwid_signals')
-    __slots__ = ('__weakref__', '_container', '_wcallback', '_urwid_signals')
+    #__slots__ = ('__weakref__', '_container', '_wcallback')
     _factory_callback = staticmethod(_conv_factory)
 
     def __init__(self, *args, **kwargs):
@@ -377,7 +401,7 @@ class thread_container(list):
         '''
         Sort conversations so newest are at the top.
         '''
-        self.sort(key=attrgetter('last_update'), reverse=True)
+        self.sort(key=attrgetter(cstr_last_update), reverse=True)
 
     def __getitem__(self, idx):
         '''

@@ -135,7 +135,8 @@ def _msg_factory(muuid, msg):
 
         return __data
     #__data_m = map(do_get, msg_fields)
-    __data_m = threadmap.map(do_get, msg_fields)
+    #__data_m = threadmap.map(do_get, msg_fields)
+    __data_m = (do_get(x) for x in msg_fields)
     return __data_m
 
 def conv_factory(msg):
@@ -296,8 +297,8 @@ class tup_conv_container(_conv_container):
             self.nique_terms.clear()
             self.labels.clear()
             self.muuids.clear()
-            __res = threadmap.map(lambda x: self._factory_callback(x)[:3],
-                                                                self.messages)
+            #__res = map(lambda x: self._factory_callback(x)[:3], self.messages)
+            __res = (self._factory_callback(x)[:3] for x in self.messages)
             __res = zip(__res)
             map(self.nique_terms.update, __res[0])
             map(self.labels.update, __res[1])
@@ -310,7 +311,8 @@ class tup_conv_container(_conv_container):
 
         self.nique_terms.update(dispose.nique_terms)
         self.labels.update(dispose.labels)
-        threadmap.map(do_insort,
+        #threadmap.map(do_insort,
+        map(do_insort,
                 filter(lambda x: x.muuid[0] not in self.muuids, dispose.messages))
 
 #conv_container = obj_conv_container
@@ -418,7 +420,8 @@ class thread_container(list):
     _thread = join
 
     def thread(self, msgs):
-        map(self._thread, threadmap.map(conv_factory, msgs) )
+        #map(self._thread, threadmap.map(conv_factory, msgs) )
+        map(self._thread, (conv_factory(x) for x in msgs) )
         self.datesort()
         return
         

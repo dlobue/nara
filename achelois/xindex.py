@@ -6,7 +6,9 @@ from email.iterators import typed_subpart_iterator
 from Queue import Queue, Empty
 from threading import Thread
 from operator import itemgetter
+from functools import partial
 from types import GeneratorType
+from mailbox import MaildirMessage
 import cPickle
 from os import path
 
@@ -137,7 +139,7 @@ def _set_field_actions(idxconn):
     idxconn.add_field_action('thread', xappy.FieldActions.COLLAPSE)
     #idxconn.add_field_action('thread', xappy.FieldActions.SORTABLE, type='string')
 
-    #idxconn.set_max_mem_use(max_mem=256*1024*1024)
+    idxconn.set_max_mem_use(max_mem=256*1024*1024)
 
     return idxconn
 
@@ -334,8 +336,12 @@ def _modify_existing(muuid, field, data, value=None, termadd=True, dataadd=None)
         __doc.data[field] = [data]
     return __doc
 
-def _content_parse(muuid):
+def content_parse(muuid):
     msg = mail_grab.get(muuid)
+    r = _content_parse(msg)
+    return r
+
+def _content_parse(msg):
     if not msg.is_multipart():
         __content = msg.get_payload(decode=True)
     else:
@@ -345,18 +351,32 @@ def _content_parse(muuid):
         __content = ' '.join(__content)
     return __content
 
-def make_doc(msg):
+def make_doc(msg, threader=None):
+    '''
+    Build xapian document from a msg_container or from a MaildirMessage
+    '''
     if type(msg) is not msg_container:
+        if type(msg) is tuple and isinstance(msg[1], MaildirMessage):
+            srcmesg = msg[1]
+        else:
+            srcmesg = None
         msg = msg_factory(msg)
-    __doc = _make_doc(msg)
-    return __doc
-
-def _make_doc(msg):
+    if threader:
+        threader.thread(msg)
     doc = xappy.UnprocessedDocument()
+    map(partial(_make_doc, doc, msg, srcmesg=srcmesg), msg_fields)
+    #__doc = _make_doc(msg)
+    return doc
 
-    for field in msg_fields:
+#def _make_doc(msg):
+
+    #for field in msg_fields:
+def _make_doc(doc, msg, field, srcmesg=None):
         if field == 'sample':
-            __data = _content_parse(msg.muuid[0])
+            if srcmesg:
+                __data = _content_parse(srcmesg)
+            else:
+                __data = content_parse(msg.muuid[0])
             _do_append_field(doc, 'content', __data)
             __data = __data[:80]
         else:
@@ -368,7 +388,7 @@ def _make_doc(msg):
         else:
             _do_append_field(doc, field, __data)
 
-    return doc
+    #return doc
 
 def _get_doc(muuid):
     if hasattr(muuid, '__iter__'):
@@ -418,6 +438,7 @@ def index_factory(msgs, ensure=False):
 
 
 if __name__ == '__main__':
+    print "%s - started indexing" % datetime.now()
     try: sconn = xappy.SearchConnection(srchidx)
     except:
         xconn.indexer_init()
@@ -426,7 +447,7 @@ if __name__ == '__main__':
     print 'iterating through mail and creating msg_containers'
     t = time.time()
     #all_rmsgs = [ msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() ]
-    all_msgs = forkmap.map(msg_factory, mail_grab.iteritems())
+    #all_msgs = forkmap.map(msg_factory, mail_grab.iteritems())
     #t = time.time() - t
     #print "done! took %r seconds" % t
     #print 'all_rmsgs %i' % len(all_msgs)
@@ -443,46 +464,61 @@ if __name__ == '__main__':
     #print "building msgs now"
     #t = time.time()
     #all_msgs = forkmap.map(msg_factory, iterdocs())
-    t = time.time() - t
-    print "done! took %r seconds" % t
-    threader = lazythread_container()
-    print "building conversations"
-    t = time.time()
+    #t = time.time() - t
+    #print "done! took %r seconds" % t
+    #threader = lazythread_container()
+    #print "building conversations"
+    #t = time.time()
     #convs = map(conv_factory, all_msgs)
-    convs = threadmap.map(conv_factory, all_msgs)
-    t = time.time() - t
-    print "done! took %r seconds" % t
-    print 'threading'
-    t = time.time()
-    threader.thread( convs )
-    t = time.time() - t
-    print "done! took %r seconds" % t
-    print len(threader), ' conversations'
-    c = 0
-    for conv in threader:
-        c+=len(conv.messages)
-    print c, " total messages, out of ", len(all_msgs)
-    print 'running integrity checker'
-    t = time.time()
-    docs = _ensure_threading_integrity(threader, True)
-    t = time.time() - t
-    print "done! took %r seconds" % t
-    print "pickling results"
-    t = time.time()
+    #convs = threadmap.map(conv_factory, all_msgs)
+    #t = time.time() - t
+    #print "done! took %r seconds" % t
+    #print 'threading'
+    #t = time.time()
+    #threader.thread( convs )
+    #t = time.time() - t
+    #print "done! took %r seconds" % t
+    #print len(threader), ' conversations'
+    #c = 0
+    #for conv in threader:
+        #c+=len(conv.messages)
+    #print c, " total messages, out of ", len(all_msgs)
+    #print 'running integrity checker'
+    #t = time.time()
+    #docs = _ensure_threading_integrity(threader, True)
+    #t = time.time() - t
+    #print "done! took %r seconds" % t
+    #print "pickling results"
+    #t = time.time()
     #finwork = path.join(settingsdir, 'preprocess.pickle')
     #try:
         #with open(finwork, 'wb') as f:
             #cPickle.dump(docs, f)
             #except:
                 #pass
-    t = time.time() - t
-    print "done! took %r seconds" % t
+    #t = time.time() - t
+    #print "done! took %r seconds" % t
     #print 'processing docs'
     #t = time.time()
     #docs = threadmap.map(xconn.process, docs)
     #docs = map(xconn.process, docs)
     #t = time.time() - t
     #print "done! took %r seconds" % t
+    from stream import ForkedFeeder, PCollector
+
+    print 'making xapian docs from maildir sources'
+    t = time.time()
+    threader = lazythread_container()
+    #docs = PCollector()
+    def getgen():
+        return (make_doc(x, threader=threader) for x in mail_grab.iteritems())
+    #for _ in range(4):
+        #ForkedFeeder(getgen) >> docs
+    docs = (make_doc(x, threader=threader) for x in mail_grab.iteritems())
+    #docs = forkmap.map(partial(make_doc, threader=threader), mail_grab.iteritems())
+    t = time.time() - t
+    print "done! took %r seconds" % t
+
     print 'queueing docs'
     t = time.time()
     map(xconn.replace, docs)

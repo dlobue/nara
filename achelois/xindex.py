@@ -26,6 +26,7 @@ from databasics import msg_fields, msg_container, msg_factory, lazythread_contai
 
 from lib import threadmap, forkmap, exc
 
+XAPPROXYENABLE = True
 #srchidx = 'xap.idx'
 srchidx = xapidx
 
@@ -168,12 +169,15 @@ def _set_field_actions(idxconn):
 
     return idxconn
 
-#xconn = XapProxy()
-xconn = xappy.IndexerConnection(srchidx)
+if XAPPROXYENABLE:
+    xconn = XapProxy()
+else:
+    xconn = xappy.IndexerConnection(srchidx)
 
 try: sconn = xappy.SearchConnection(srchidx)
 except:
-    #xconn.indexer_init()
+    if XAPPROXYENABLE:
+        xconn.indexer_init()
     sconn = xappy.SearchConnection(srchidx)
 
 def _preindex_thread(msgs):
@@ -425,7 +429,7 @@ def _make_doc(doc, msg, field, srcmesg=None):
 
 def _get_doc(muuid):
     if isinstance(muuid, msg_container):
-        muuid = str(muuid.muuid)
+        muuid = muuid.muuid[0]
     elif hasattr(muuid, '__iter__'):
         muuid = muuid[0]
     try: doc = sconn.get_document(muuid)
@@ -479,10 +483,10 @@ def index_factory(msgs, ensure=False):
 def index_factory_new():
     print 'making xapian docs from maildir sources'
     t = time.time()
-    threader = lazythread_container()
+    #threader = lazythread_container()
     #docs = PCollector()
-    def getgen():
-        return (make_doc(x, threader=threader) for x in mail_grab.iteritems())
+    #def getgen():
+        #return (make_doc(x, threader=threader) for x in mail_grab.iteritems())
     #for _ in range(4):
         #ForkedFeeder(getgen) >> docs
     docs = (make_doc(x) for x in mail_grab.iteritems())
@@ -501,20 +505,6 @@ def index_factory_new():
     print "waiting for work to finish"
     print "%s - started waiting at" % datetime.now()
     #xconn._queue.join()
-    return
-    print 'running integrity checker'
-    t = time.time()
-    docs = _ensure_threading_integrity()
-    t = time.time() - t
-    print "done! took %r seconds" % t
-    print 'queueing docs'
-    t = time.time()
-    map(xconn.replace, docs)
-    xconn.flush()
-    t = time.time() - t
-    print "done! took %r seconds" % t
-    print "waiting for work to finish"
-    print "%s - started waiting at" % datetime.now()
 
 def fix_thread_integrity():
     print 'running integrity checker'
@@ -528,10 +518,10 @@ def fix_thread_integrity():
     #xconn._timeout = 300
     #xconn.indexer_init()
     print "finished turning generator into list"
-    #map(xconn.replace, docs)
-    for doc in docs:
+    map(xconn.replace, docs)
+    #for doc in docs:
         #print doc
-        xconn.replace(doc)
+        #xconn.replace(doc)
         #xconn._idxconn.replace(doc)
     xconn.flush()
     #xconn._idxconn.flush()
@@ -543,8 +533,9 @@ def fix_thread_integrity():
 if __name__ == '__main__':
     print "%s - started indexing" % datetime.now()
 
-    #index_factory_new()
-    fix_thread_integrity()
+    index_factory_new()
+    #fix_thread_integrity()
+    #xconn.close()
 
 
 

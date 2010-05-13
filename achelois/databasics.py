@@ -519,7 +519,8 @@ class lazythread_container(thread_container):
         As a last step this method sorts all conversations by date, newest
         first (ie- most recently updated conversation is at index 0).
         '''
-        map(self._thread, messages)
+        #map(self._thread, messages)
+        map(self._thread, (conv_factory(x) for x in messages if isinstance(x, msg_container)) )
         self.datesort()
         return
 

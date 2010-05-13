@@ -1,10 +1,13 @@
 #!/usr/bin/python
 
+import cgitb
+cgitb.enable(format='text')
+
 from overwatch import mail_grab, settings, xapidx
 
 from email.iterators import typed_subpart_iterator
 from Queue import Queue, Empty
-from threading import Thread
+from threading import Thread, Lock
 from operator import itemgetter
 from functools import partial
 from types import GeneratorType
@@ -13,6 +16,7 @@ import cPickle
 from os import path
 
 from datetime import datetime
+import time
 
 import xappy
 
@@ -32,13 +36,23 @@ class XapProxy(Singleton):
     thread_started = False
     indexer_started = False
     _idxconn = None
+    _worker = None
+    _timeout = 30
+    _lock = Lock()
+    _noque = ('process', 'iterids', 'get_document', 'iter_facet_query_types',
+              'iter_subfacets', 'iter_synonyms')
 
     #def __init__(self):
         #self.indexer_init()
         #self.thread_init()
 
     def __getattr__(self, name):
-        if name in xappy.IndexerConnection.__dict__:
+        if name in self._noque:
+            try: return getattr(self._idxconn, name)
+            except (xappy.IndexerError, AttributeError):
+                self.indexer_init()
+                return getattr(self._idxconn, name)
+        elif hasattr(xappy.IndexerConnection, name):
             return self._q_add(name)
         raise AttributeError('No such attribute %s' % name)
 
@@ -49,42 +63,53 @@ class XapProxy(Singleton):
             return self._idxconn.process(doc)
 
     def worker(self):
-        def shutdown():
-            self._idxconn.flush()
-            try: sconn.reopen()
-            except: pass
-            self._idxconn.close()
-            self.thread_started = False
-            self.indexer_started = False
-        while 1:
-            try: job = self._queue.get(True, 30)
-            except Empty:
-                shutdown()
-                break
-            task, args, kwargs = job
-            getattr(self._idxconn, task)(*args, **kwargs)
-
-            self._queue.task_done()
-            if task == 'flush':
-                print "%s - processing flush now" % datetime.now()
+        with self._lock:
+            def shutdown():
+                self._idxconn.flush()
                 try: sconn.reopen()
                 except: pass
-                if self._queue.empty():
+                self._idxconn.close()
+                self.thread_started = False
+                self.indexer_started = False
+            while 1:
+                try: job = self._queue.get(True, self._timeout)
+                except Empty:
                     shutdown()
                     break
+                task, args, kwargs = job
+                getattr(self._idxconn, task)(*args, **kwargs)
+
+                self._queue.task_done()
+                if task == 'flush':
+                    print "%s - processing flush now" % datetime.now()
+                    try: sconn.reopen()
+                    except: pass
+                    if self._queue.empty():
+                        shutdown()
+                        break
 
     def thread_init(self):
-        if not self.thread_started:
-            t = Thread(target=self.worker)
-            t.start()
-        self.thread_started = True
-        if not self.indexer_started: self.indexer_init()
+        if self._lock.locked():
+            return
+        self._lock.acquire()
+        try:
+            if not self.thread_started:
+                t = Thread(target=self.worker)
+                t.start()
+                self._worker = t
+            self.thread_started = True
+        finally:
+            self._lock.release()
+            if not self.indexer_started: self.indexer_init()
 
     def indexer_init(self):
-        if not self.indexer_started:
-            _idxconn = xappy.IndexerConnection(srchidx)
-            self._idxconn = _set_field_actions(_idxconn)
-        self.indexer_started = True
+        if self._lock.locked():
+            return
+        with self._lock:
+            if not self.indexer_started:
+                _idxconn = xappy.IndexerConnection(srchidx)
+                self._idxconn = _set_field_actions(_idxconn)
+            self.indexer_started = True
         if not self.thread_started: self.thread_init()
 
     def _q_add(self, action):
@@ -143,7 +168,13 @@ def _set_field_actions(idxconn):
 
     return idxconn
 
-xconn = XapProxy()
+#xconn = XapProxy()
+xconn = xappy.IndexerConnection(srchidx)
+
+try: sconn = xappy.SearchConnection(srchidx)
+except:
+    #xconn.indexer_init()
+    sconn = xappy.SearchConnection(srchidx)
 
 def _preindex_thread(msgs):
     tracker = {}
@@ -195,9 +226,10 @@ def _preindex_thread(msgs):
 def _ensure_threading_integrity(threader=None, all_new=False):
     if not threader:
         threader = lazythread_container()
-        all_msgs = iterdocs()
-        all_msgs = map(msg_factory, all_msgs)
-        all_msgs = threadmap.map(conv_factory, all_msgs)
+        all_msgs = (msg_factory(x) for x in iterdocs(safe=True))
+        #all_msgs = (conv_factory(x) for x in all_msgs)
+        #all_msgs = map(msg_factory, all_msgs)
+        #all_msgs = threadmap.map(conv_factory, all_msgs)
         threader.thread(all_msgs)
 
     to_update = []
@@ -213,7 +245,8 @@ def _ensure_threading_integrity(threader=None, all_new=False):
             elif ctid != msg.thread:
                 to_replace.append(id_data_tple)
 
-    threadmap.map(ctid_to_mtid, threader)
+    map(ctid_to_mtid, threader)
+    #threadmap.map(ctid_to_mtid, threader)
     print "in update queue  %i" % len(to_update)
     print "in replace queue %i" % len(to_replace)
     print '%s - starting modify factory on to_update' % datetime.now()
@@ -253,7 +286,7 @@ def modify_factory(id_data_tples, modify_callback, all_new=False):
         #__docs = forkmap.map(lambda x: (make_doc(x[0]), x[1]), id_data_tples )
         __docs = ( (make_doc(muuid), data) for muuid,data in id_data_tples )
     else:
-        #__docs = threadmap.map(lambda x: (_get_doc(x[0]), x[1]), id_data_tples )
+        #__docs = map(lambda x: (_get_doc(x[0]), x[1]), id_data_tples )
         #__docs = forkmap.map(lambda x: (_get_doc(x[0]), x[1]), id_data_tples )
         #__docs = threadmap.map(lambda muuid,data: (_get_doc(muuid), data), id_data_tples )
         __docs = ( (_get_doc(muuid), data) for muuid,data in id_data_tples )
@@ -362,7 +395,7 @@ def make_doc(msg, threader=None):
             srcmesg = None
         msg = msg_factory(msg)
     if threader:
-        threader.thread(msg)
+        threader.thread([msg])
     doc = xappy.UnprocessedDocument()
     map(partial(_make_doc, doc, msg, srcmesg=srcmesg), msg_fields)
     #__doc = _make_doc(msg)
@@ -391,7 +424,9 @@ def _make_doc(doc, msg, field, srcmesg=None):
     #return doc
 
 def _get_doc(muuid):
-    if hasattr(muuid, '__iter__'):
+    if isinstance(muuid, msg_container):
+        muuid = str(muuid.muuid)
+    elif hasattr(muuid, '__iter__'):
         muuid = muuid[0]
     try: doc = sconn.get_document(muuid)
     except KeyError:
@@ -408,8 +443,12 @@ def _do_append_field(doc, field, data=None):
     if data: return wrapper(data)
     else: return wrapper
 
-def iterdocs():
-    return ( _get_doc(__x) for __x in sconn.iterids() )
+def iterdocs(safe=False):
+    if safe:
+        iconn = xconn
+    else:
+        iconn = sconn
+    return ( _get_doc(__x) for __x in iconn.iterids() )
 
 def index_factory(msgs, ensure=False):
     if not hasattr(msgs, '__iter__'):
@@ -437,15 +476,80 @@ def index_factory(msgs, ensure=False):
     xconn.flush()
 
 
+def index_factory_new():
+    print 'making xapian docs from maildir sources'
+    t = time.time()
+    threader = lazythread_container()
+    #docs = PCollector()
+    def getgen():
+        return (make_doc(x, threader=threader) for x in mail_grab.iteritems())
+    #for _ in range(4):
+        #ForkedFeeder(getgen) >> docs
+    docs = (make_doc(x) for x in mail_grab.iteritems())
+    #docs = forkmap.map(make_doc, mail_grab.iteritems())
+    #docs = (make_doc(x, threader=threader) for x in mail_grab.iteritems())
+    #docs = forkmap.map(partial(make_doc, threader=threader), mail_grab.iteritems())
+    t = time.time() - t
+    print "done! took %r seconds" % t
+
+    print 'queueing docs'
+    t = time.time()
+    map(xconn.replace, docs)
+    xconn.flush()
+    t = time.time() - t
+    print "done! took %r seconds" % t
+    print "waiting for work to finish"
+    print "%s - started waiting at" % datetime.now()
+    #xconn._queue.join()
+    return
+    print 'running integrity checker'
+    t = time.time()
+    docs = _ensure_threading_integrity()
+    t = time.time() - t
+    print "done! took %r seconds" % t
+    print 'queueing docs'
+    t = time.time()
+    map(xconn.replace, docs)
+    xconn.flush()
+    t = time.time() - t
+    print "done! took %r seconds" % t
+    print "waiting for work to finish"
+    print "%s - started waiting at" % datetime.now()
+
+def fix_thread_integrity():
+    print 'running integrity checker'
+    t = time.time()
+    docs = _ensure_threading_integrity()
+    t = time.time() - t
+    print "done! took %r seconds" % t
+    print 'queueing docs'
+    t = time.time()
+    docs = list(docs)
+    #xconn._timeout = 300
+    #xconn.indexer_init()
+    print "finished turning generator into list"
+    #map(xconn.replace, docs)
+    for doc in docs:
+        #print doc
+        xconn.replace(doc)
+        #xconn._idxconn.replace(doc)
+    xconn.flush()
+    #xconn._idxconn.flush()
+    t = time.time() - t
+    print "done! took %r seconds" % t
+    print "waiting for work to finish"
+    print "%s - started waiting at" % datetime.now()
+
 if __name__ == '__main__':
     print "%s - started indexing" % datetime.now()
-    try: sconn = xappy.SearchConnection(srchidx)
-    except:
-        xconn.indexer_init()
-        sconn = xappy.SearchConnection(srchidx)
-    import time
-    print 'iterating through mail and creating msg_containers'
-    t = time.time()
+
+    #index_factory_new()
+    fix_thread_integrity()
+
+
+
+    #print 'iterating through mail and creating msg_containers'
+    #t = time.time()
     #all_rmsgs = [ msg_factory(muuid, msg) for muuid,msg in mail_grab.iteritems() ]
     #all_msgs = forkmap.map(msg_factory, mail_grab.iteritems())
     #t = time.time() - t
@@ -504,26 +608,43 @@ if __name__ == '__main__':
     #docs = map(xconn.process, docs)
     #t = time.time() - t
     #print "done! took %r seconds" % t
-    from stream import ForkedFeeder, PCollector
+    #from stream import ForkedFeeder, PCollector
 
-    print 'making xapian docs from maildir sources'
-    t = time.time()
-    threader = lazythread_container()
+    #print 'making xapian docs from maildir sources'
+    #t = time.time()
+    #threader = lazythread_container()
     #docs = PCollector()
-    def getgen():
-        return (make_doc(x, threader=threader) for x in mail_grab.iteritems())
+    #def getgen():
+        #return (make_doc(x, threader=threader) for x in mail_grab.iteritems())
     #for _ in range(4):
         #ForkedFeeder(getgen) >> docs
-    docs = (make_doc(x, threader=threader) for x in mail_grab.iteritems())
+        #docs = (make_doc(x) for x in mail_grab.iteritems())
+    #docs = forkmap.map(make_doc, mail_grab.iteritems())
+    #docs = (make_doc(x, threader=threader) for x in mail_grab.iteritems())
     #docs = forkmap.map(partial(make_doc, threader=threader), mail_grab.iteritems())
-    t = time.time() - t
-    print "done! took %r seconds" % t
+#    t = time.time() - t
+#    print "done! took %r seconds" % t
+#
+#    print 'queueing docs'
+#    t = time.time()
+#    map(xconn.replace, docs)
+#    xconn.flush()
+#    t = time.time() - t
+#    print "done! took %r seconds" % t
+#    print "waiting for work to finish"
+#    print "%s - started waiting at" % datetime.now()
+#    xconn._queue.join()
+#    print 'running integrity checker'
+#    t = time.time()
+#    docs = _ensure_threading_integrity()
+#    t = time.time() - t
+#    print "done! took %r seconds" % t
+#    print 'queueing docs'
+#    t = time.time()
+#    map(xconn.replace, docs)
+#    xconn.flush()
+#    t = time.time() - t
+#    print "done! took %r seconds" % t
+#    print "waiting for work to finish"
+#    print "%s - started waiting at" % datetime.now()
 
-    print 'queueing docs'
-    t = time.time()
-    map(xconn.replace, docs)
-    xconn.flush()
-    t = time.time() - t
-    print "done! took %r seconds" % t
-    print "waiting for work to finish"
-    print "%s - started waiting at" % datetime.now()

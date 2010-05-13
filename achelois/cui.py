@@ -87,7 +87,7 @@ class fraMe(urwid.Frame):
         elif key == 'Q':
             raise urwid.ExitMainLoop
         elif key == 'f2':
-            buffer_manager.set_buffer(self.lines2)
+            buffer_manager.set_buffer(lines2)
         elif key == 'b':
             buffer_manager.set_next()
         elif key == 'B':

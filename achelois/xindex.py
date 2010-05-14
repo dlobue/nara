@@ -2,6 +2,7 @@
 
 import cgitb
 cgitb.enable(format='text')
+from IPython.Shell import IPShellEmbed
 
 from overwatch import mail_grab, settings, xapidx
 
@@ -57,11 +58,13 @@ class XapProxy(Singleton):
             return self._q_add(name)
         raise AttributeError('No such attribute %s' % name)
 
-    def process(self, doc):
-        try: return self._idxconn.process(doc)
-        except:
-            self.indexer_init()
-            return self._idxconn.process(doc)
+    def flush(self):
+        '''
+        Flush all writes to the database and don't do
+        anything else until done!
+        '''
+        self._q_add('flush')()
+        self._queue.join()
 
     def worker(self):
         with self._lock:
@@ -78,7 +81,16 @@ class XapProxy(Singleton):
                     shutdown()
                     break
                 task, args, kwargs = job
-                getattr(self._idxconn, task)(*args, **kwargs)
+                try: getattr(self._idxconn, task)(*args, **kwargs)
+                except xappy.XapianDatabaseModifiedError, e:
+                    print e
+                    print task
+                    print args
+                    print kwargs
+                    print '\n'
+                    self._idxconn._index.reopen()
+                    sconn.reopen()
+                    getattr(self._idxconn, task)(*args, **kwargs)
 
                 self._queue.task_done()
                 if task == 'flush':
@@ -96,6 +108,7 @@ class XapProxy(Singleton):
         try:
             if not self.thread_started:
                 t = Thread(target=self.worker)
+                t.daemon = True
                 t.start()
                 self._worker = t
             self.thread_started = True
@@ -504,7 +517,7 @@ def index_factory_new():
     print "done! took %r seconds" % t
     print "waiting for work to finish"
     print "%s - started waiting at" % datetime.now()
-    #xconn._queue.join()
+    xconn._queue.join()
 
 def fix_thread_integrity():
     print 'running integrity checker'
@@ -534,7 +547,7 @@ if __name__ == '__main__':
     print "%s - started indexing" % datetime.now()
 
     index_factory_new()
-    #fix_thread_integrity()
+    fix_thread_integrity()
     #xconn.close()
 
 

@@ -28,7 +28,7 @@ class prop_deque(deque):
     def __str__(self):
         if len(self) == 1:
             return self[0]
-        return self
+        return deque.__str__(self)
 
     def __call__(self):
         if len(self) == 1:

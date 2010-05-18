@@ -2,7 +2,7 @@
 
 import cgitb
 cgitb.enable(format='text')
-from IPython.Shell import IPShellEmbed
+#from IPython.Shell import IPShellEmbed
 
 from overwatch import mail_grab, settings, xapidx
 
@@ -13,15 +13,12 @@ from operator import itemgetter
 from functools import partial
 from types import GeneratorType
 from mailbox import MaildirMessage
-import cPickle
-from os import path
 
 from datetime import datetime
 import time
 
 import xappy
 
-from settings import settingsdir
 from lib.metautil import Singleton, MetaSuper
 from databasics import msg_fields, msg_container, msg_factory, lazythread_container, conv_factory
 
@@ -39,14 +36,10 @@ class XapProxy(Singleton):
     indexer_started = False
     _idxconn = None
     _worker = None
-    _timeout = 30
+    _timeout = 1
     _lock = Lock()
     _noque = ('process', 'iterids', 'get_document', 'iter_facet_query_types',
               'iter_subfacets', 'iter_synonyms')
-
-    #def __init__(self):
-        #self.indexer_init()
-        #self.thread_init()
 
     def __getattr__(self, name):
         if name in self._noque:
@@ -64,7 +57,7 @@ class XapProxy(Singleton):
         anything else until done!
         '''
         self._q_add('flush')()
-        self._queue.join()
+        self._worker.join()
 
     def worker(self):
         with self._lock:
@@ -108,7 +101,7 @@ class XapProxy(Singleton):
         try:
             if not self.thread_started:
                 t = Thread(target=self.worker)
-                t.daemon = True
+                #t.daemon = True
                 t.start()
                 self._worker = t
             self.thread_started = True
@@ -244,9 +237,6 @@ def _ensure_threading_integrity(threader=None, all_new=False):
     if not threader:
         threader = lazythread_container()
         all_msgs = (msg_factory(x) for x in iterdocs(safe=True))
-        #all_msgs = (conv_factory(x) for x in all_msgs)
-        #all_msgs = map(msg_factory, all_msgs)
-        #all_msgs = threadmap.map(conv_factory, all_msgs)
         threader.thread(all_msgs)
 
     to_update = []
@@ -263,13 +253,11 @@ def _ensure_threading_integrity(threader=None, all_new=False):
                 to_replace.append(id_data_tple)
 
     map(ctid_to_mtid, threader)
-    #threadmap.map(ctid_to_mtid, threader)
     print "in update queue  %i" % len(to_update)
     print "in replace queue %i" % len(to_replace)
     print '%s - starting modify factory on to_update' % datetime.now()
     docs1 = modify_factory(to_update, update_existing, all_new)
     print '%s - starting modify factory on to_replace' % datetime.now()
-    #docs.extend( modify_factory(to_replace, replace_existing, all_new) )
     docs2 = modify_factory(to_replace, replace_existing, all_new)
     def chn_gen(gg):
         it = gg.next()
@@ -299,18 +287,12 @@ def modify_factory(id_data_tples, modify_callback, all_new=False):
     """
     print '%s - building tuples' % datetime.now()
     if all_new:
-        #__docs = forkmap.map(lambda x: (make_doc(x[0]), x[1]), id_data_tples )
-        #__docs = forkmap.map(lambda x: (make_doc(x[0]), x[1]), id_data_tples )
         __docs = ( (make_doc(muuid), data) for muuid,data in id_data_tples )
     else:
-        #__docs = map(lambda x: (_get_doc(x[0]), x[1]), id_data_tples )
-        #__docs = forkmap.map(lambda x: (_get_doc(x[0]), x[1]), id_data_tples )
-        #__docs = threadmap.map(lambda muuid,data: (_get_doc(muuid), data), id_data_tples )
         __docs = ( (_get_doc(muuid), data) for muuid,data in id_data_tples )
     print '%s - running callback modifier' % datetime.now()
     __docs = modify_callback(__docs)
     print '%s - extracting docs' % datetime.now()
-    #__docs = threadmap.map(itemgetter(0), __docs)
     __docs = (x[0] for x in __docs)
     return __docs
 
@@ -351,25 +333,25 @@ def update_existing(doc_data_tples):
         map(per_field, data_tples)
         return doc
 
-    #__docs = threadmap.map(lambda x: (per_doc(x[0], x[1]), x[1]), doc_data_tples )
-    #__docs = threadmap.map(lambda doc,data_tples: (per_doc(doc, data_tples), data_tples), doc_data_tples )
     __docs = ( (per_doc(doc, data_tples), data_tples) for doc,data_tples in doc_data_tples )
     return __docs
 
 def modify_existing(id_data_tples, field, value=None, termadd=True, dataadd=None):
     """
+    DEPRECIATED.
     id_data_tples: list of tuples who values are (muuid, data)
     muuid = message universally unique identifier
     data = data to index
     """
-    #__moddocs = [ _modify_existing(muuid, field, data, value, termadd, dataadd) for muuid,data in id_data_tples ]
-    #__moddocs = [ __x.prepare() for __x in __moddocs ]
     __moddocs = ( _modify_existing(muuid, field, data, value, termadd, dataadd) for muuid,data in id_data_tples )
     __moddocs = ( __x.prepare() for __x in __moddocs )
     map(xconn.replace, __moddocs)
     xconn.flush()
 
 def _modify_existing(muuid, field, data, value=None, termadd=True, dataadd=None):
+    '''
+    DEPRECIATED
+    '''
     __doc = sconn.get_document(muuid)
     if type(data) is list:
         if len(data) > 1: raise TypeError("data is a list containing more than one value. this function should only be called once per value. data contains: %s" % str(data))
@@ -386,10 +368,12 @@ def _modify_existing(muuid, field, data, value=None, termadd=True, dataadd=None)
         __doc.data[field] = [data]
     return __doc
 
+
 def content_parse(muuid):
     msg = mail_grab.get(muuid)
     r = _content_parse(msg)
     return r
+
 
 def _content_parse(msg):
     if not msg.is_multipart():
@@ -400,6 +384,7 @@ def _content_parse(msg):
                         if 'filename' not in m.get('Content-Disposition',''))
         __content = ' '.join(__content)
     return __content
+
 
 def make_doc(msg, threader=None):
     '''
@@ -415,12 +400,9 @@ def make_doc(msg, threader=None):
         threader.thread([msg])
     doc = xappy.UnprocessedDocument()
     map(partial(_make_doc, doc, msg, srcmesg=srcmesg), msg_fields)
-    #__doc = _make_doc(msg)
     return doc
 
-#def _make_doc(msg):
 
-    #for field in msg_fields:
 def _make_doc(doc, msg, field, srcmesg=None):
         if field == 'sample':
             if srcmesg:
@@ -438,7 +420,6 @@ def _make_doc(doc, msg, field, srcmesg=None):
         else:
             _do_append_field(doc, field, __data)
 
-    #return doc
 
 def _get_doc(muuid):
     if isinstance(muuid, msg_container):
@@ -457,6 +438,7 @@ def _do_append_field(doc, field, data=None):
         except: doc.fields = []
         doc.fields.append(xappy.Field(field, data))
         return doc
+
     if data: return wrapper(data)
     else: return wrapper
 
@@ -467,41 +449,10 @@ def iterdocs(safe=False):
         iconn = sconn
     return ( _get_doc(__x) for __x in iconn.iterids() )
 
-def index_factory(msgs, ensure=False):
-    if not hasattr(msgs, '__iter__'):
-        msgs = [msgs]
-    if type(msgs) is GeneratorType:
-        ensure = True
-        msg_count = 0
-        tot_count = 0
-        last_integ_chk = 0
-        since_last = 0
-    else:
-        msg_count = len(msgs)
-        tot_count = msg_count + settings.get('total_indexed',0)
-        last_integ_chk = settings.get('integrity_chk',0)
-        since_last = tot_count - last_integ_chk
-
-    if ensure or msg_count > 10 or since_last > 10:
-        msgs, threader =_preindex_thread(msgs)
-    __docs = map(make_doc, msgs)
-    print 'after make_doc %i' % len(__docs)
-    #if ensure or since_last > 10:
-        #__docs.extend( _ensure_threading_integrity(threader) )
-    #__docs = map(xconn.process, __docs)
-    map(xconn.replace, __docs)
-    xconn.flush()
-
 
 def index_factory_new():
     print 'making xapian docs from maildir sources'
     t = time.time()
-    #threader = lazythread_container()
-    #docs = PCollector()
-    #def getgen():
-        #return (make_doc(x, threader=threader) for x in mail_grab.iteritems())
-    #for _ in range(4):
-        #ForkedFeeder(getgen) >> docs
     docs = (make_doc(x) for x in mail_grab.iteritems())
     #docs = forkmap.map(make_doc, mail_grab.iteritems())
     #docs = (make_doc(x, threader=threader) for x in mail_grab.iteritems())
@@ -516,8 +467,6 @@ def index_factory_new():
     t = time.time() - t
     print "done! took %r seconds" % t
     print "waiting for work to finish"
-    print "%s - started waiting at" % datetime.now()
-    xconn._queue.join()
 
 def fix_thread_integrity():
     print 'running integrity checker'

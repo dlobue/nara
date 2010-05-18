@@ -57,14 +57,13 @@ class XapProxy(Singleton):
         anything else until done!
         '''
         self._q_add('flush')()
-        self._worker.join()
+        self._queue.join()
 
     def worker(self):
         with self._lock:
             def shutdown():
                 self._idxconn.flush()
-                try: sconn.reopen()
-                except: pass
+                sconn.reopen()
                 self._idxconn.close()
                 self.thread_started = False
                 self.indexer_started = False
@@ -76,20 +75,19 @@ class XapProxy(Singleton):
                 task, args, kwargs = job
                 try: getattr(self._idxconn, task)(*args, **kwargs)
                 except xappy.XapianDatabaseModifiedError, e:
+                    self._idxconn._index.reopen()
+                    sconn.reopen()
                     print e
                     print task
                     print args
                     print kwargs
                     print '\n'
-                    self._idxconn._index.reopen()
-                    sconn.reopen()
                     getattr(self._idxconn, task)(*args, **kwargs)
 
                 self._queue.task_done()
                 if task == 'flush':
                     print "%s - processing flush now" % datetime.now()
-                    try: sconn.reopen()
-                    except: pass
+                    sconn.reopen()
                     if self._queue.empty():
                         shutdown()
                         break
@@ -237,6 +235,7 @@ def _ensure_threading_integrity(threader=None, all_new=False):
     if not threader:
         threader = lazythread_container()
         all_msgs = (msg_factory(x) for x in iterdocs(safe=True))
+        all_msgs = (conv_factory(x) for x in all_msgs)
         threader.thread(all_msgs)
 
     to_update = []

@@ -242,7 +242,8 @@ def _preindex_thread(msgs):
 def _ensure_threading_integrity(threader=None, all_new=False):
     if not threader:
         threader = lazythread_container()
-        all_msgs = (msg_factory(x) for x in iterdocs(safe=True))
+        all_msgs = (msg_factory(x) for x in iterdocs())
+        #all_msgs = (msg_factory(x) for x in iterdocs(safe=True))
         all_msgs = (conv_factory(x) for x in all_msgs)
         threader.thread(all_msgs)
 

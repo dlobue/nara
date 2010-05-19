@@ -43,7 +43,10 @@ class XapProxy(Singleton):
 
     def __getattr__(self, name):
         if name in self._noque:
-            try: return getattr(self._idxconn, name)
+            try:
+                if self._idxconn._index is None:
+                    self.indexer_init()
+                return getattr(self._idxconn, name)
             except (xappy.IndexerError, AttributeError):
                 self.indexer_init()
                 return getattr(self._idxconn, name)
@@ -56,8 +59,20 @@ class XapProxy(Singleton):
         Flush all writes to the database and don't do
         anything else until done!
         '''
+        print "flush called now"
         self._q_add('flush')()
-        self._queue.join()
+        #self._queue.join()
+        self._worker.join()
+        if self._lock.locked():
+            print "lock still locked??!"
+            self._lock.release()
+        if self.thread_started:
+            print "thread is still started??!!"
+            self.thread_started = False
+        if self.indexer_started:
+            print "indexer is still started??!!"
+            self.indexer_started = False
+        print "worker should now be done, and all cleanup checks run"
 
     def worker(self):
         with self._lock:
@@ -93,23 +108,16 @@ class XapProxy(Singleton):
                         break
 
     def thread_init(self):
-        if self._lock.locked():
-            return
-        self._lock.acquire()
-        try:
+        with self._lock:
             if not self.thread_started:
                 t = Thread(target=self.worker)
                 #t.daemon = True
                 t.start()
                 self._worker = t
             self.thread_started = True
-        finally:
-            self._lock.release()
-            if not self.indexer_started: self.indexer_init()
+        if not self.indexer_started: self.indexer_init()
 
     def indexer_init(self):
-        if self._lock.locked():
-            return
         with self._lock:
             if not self.indexer_started:
                 _idxconn = xappy.IndexerConnection(srchidx)

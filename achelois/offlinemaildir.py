@@ -6,6 +6,8 @@ import os.path
 import mailbox
 from threading import Thread
 
+from lib import threadmap
+
 from settings import get_settings
 settings = get_settings()
 
@@ -33,7 +35,8 @@ class mail_sources(list):
         refresh all sources to look for new emails.
         And do every source in a separate thread so we aren't kept waiting.
         '''
-        map(self._thread, self)
+        threadmap.map(lambda x: x._refresh(), self)
+        #map(self._thread, self)
 
     def _thread(self, x, y='_refresh', z=None):
         if z is None: z = ()
@@ -46,12 +49,20 @@ class mail_sources(list):
         '''
         try every source until we find one that has the message id we're looking for.
         return the message when found.
+        if no message is found, refresh all sources and try again.
         '''
+        try: return self._get(key)
+        except KeyError:
+            self.refresh()
+            return self._get(key)
+
+    def _get(self, key):
         for source in self:
-            try: value = source.get_message(key)
-            except: pass
-            else:
-                if value: return value
+            if key in source._toc:
+                return source.get_message(key)
+
+        e = 'No message with key: %s' % key
+        raise KeyError(e)
 
     def update(self, muuid, msg):
         '''

@@ -92,11 +92,6 @@ class XapProxy(Singleton):
                 except xappy.XapianDatabaseModifiedError, e:
                     self._idxconn._index.reopen()
                     sconn.reopen()
-                    print e
-                    print task
-                    print args
-                    print kwargs
-                    print '\n'
                     getattr(self._idxconn, task)(*args, **kwargs)
 
                 self._queue.task_done()

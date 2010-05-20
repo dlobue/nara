@@ -393,11 +393,10 @@ def make_doc(msg, threader=None):
     '''
     Build xapian document from a msg_container or from a MaildirMessage
     '''
+    srcmesg = None
     if type(msg) is not msg_container:
         if type(msg) is tuple and isinstance(msg[1], MaildirMessage):
             srcmesg = msg[1]
-        else:
-            srcmesg = None
         msg = msg_factory(msg)
     if threader:
         threader.thread([msg])
@@ -454,7 +453,7 @@ def iterdocs(safe=False):
 
 
 def index_factory_new():
-    print 'making xapian docs from maildir sources'
+    print '%s - making xapian docs from maildir sources' % datetime.now()
     t = time.time()
     docs = (make_doc(x) for x in mail_grab.iteritems())
     #docs = forkmap.map(make_doc, mail_grab.iteritems())
@@ -463,13 +462,13 @@ def index_factory_new():
     t = time.time() - t
     print "done! took %r seconds" % t
 
-    print 'queueing docs'
+    print '%s - queueing docs' % datetime.now()
     t = time.time()
     map(xconn.replace, docs)
     xconn.flush()
     t = time.time() - t
     print "done! took %r seconds" % t
-    print "waiting for work to finish"
+    print "%s - waiting for work to finish" % datetime.now()
 
 def fix_thread_integrity():
     print 'running integrity checker'
@@ -479,7 +478,7 @@ def fix_thread_integrity():
     print "done! took %r seconds" % t
     print 'queueing docs'
     t = time.time()
-    docs = list(docs)
+    #docs = list(docs)
     #xconn._timeout = 300
     #xconn.indexer_init()
     print "finished turning generator into list"
@@ -495,11 +494,48 @@ def fix_thread_integrity():
     print "waiting for work to finish"
     print "%s - started waiting at" % datetime.now()
 
+def prethread_index_factory_new():
+    threader = lazythread_container()
+    print '%s - creating msg containers from raw mail' % datetime.now()
+    t = time.time()
+    all_msgs = (msg_factory(x) for x in mail_grab.iteritems())
+    #all_msgs = forkmap.map(msg_factory, mail_grab.iteritems())
+    t = time.time() - t
+    print "done! took %r seconds" % t
+
+    print '%s - building conversation objects' % datetime.now()
+    t = time.time()
+    all_msgs = (conv_factory(x) for x in all_msgs)
+    t = time.time() - t
+    print "done! took %r seconds" % t
+
+    print '%s - threading messages into conversations' % datetime.now()
+    t = time.time()
+    threader.thread(all_msgs)
+    t = time.time() - t
+    print "done! took %r seconds" % t
+
+    print '%s - running integrity checker' % datetime.now()
+    t = time.time()
+    docs = _ensure_threading_integrity(threader, True)
+    t = time.time() - t
+    print "done! took %r seconds" % t
+
+    print '%s - queueing docs' % datetime.now()
+    t = time.time()
+    map(xconn.replace, docs)
+    xconn.flush()
+    t = time.time() - t
+    print "done! took %r seconds" % t
+    print "%s - waiting for work to finish" % datetime.now()
+
 if __name__ == '__main__':
     print "%s - started indexing" % datetime.now()
 
-    index_factory_new()
-    fix_thread_integrity()
+    prethread_index_factory_new()
+
+    #index_factory_new()
+    #fix_thread_integrity()
     #xconn.close()
 
 

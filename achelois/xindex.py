@@ -398,8 +398,9 @@ def make_doc(msg, threader=None):
         if type(msg) is tuple and isinstance(msg[1], MaildirMessage):
             srcmesg = msg[1]
         msg = msg_factory(msg)
-    if threader:
-        threader.thread([msg])
+    if threader is not None:
+        threader.thread([conv_factory(msg)])
+        msg.thread.extend(threader[str(msg.msgid)].thread)
     doc = xappy.UnprocessedDocument()
     map(partial(_make_doc, doc, msg, srcmesg=srcmesg), msg_fields)
     return doc
@@ -455,9 +456,10 @@ def iterdocs(safe=False):
 def index_factory_new():
     print '%s - making xapian docs from maildir sources' % datetime.now()
     t = time.time()
-    docs = (make_doc(x) for x in mail_grab.iteritems())
+    threader = lazythread_container()
+    #docs = (make_doc(x) for x in mail_grab.iteritems())
     #docs = forkmap.map(make_doc, mail_grab.iteritems())
-    #docs = (make_doc(x, threader=threader) for x in mail_grab.iteritems())
+    docs = (make_doc(x, threader=threader) for x in mail_grab.iteritems())
     #docs = forkmap.map(partial(make_doc, threader=threader), mail_grab.iteritems())
     t = time.time() - t
     print "done! took %r seconds" % t
@@ -478,7 +480,7 @@ def fix_thread_integrity():
     print "done! took %r seconds" % t
     print 'queueing docs'
     t = time.time()
-    #docs = list(docs)
+    docs = list(docs)
     #xconn._timeout = 300
     #xconn.indexer_init()
     print "finished turning generator into list"
@@ -532,10 +534,10 @@ def prethread_index_factory_new():
 if __name__ == '__main__':
     print "%s - started indexing" % datetime.now()
 
-    prethread_index_factory_new()
+    #prethread_index_factory_new()
 
-    #index_factory_new()
-    #fix_thread_integrity()
+    index_factory_new()
+    fix_thread_integrity()
     #xconn.close()
 
 

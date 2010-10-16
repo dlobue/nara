@@ -1,6 +1,7 @@
 
 from os.path import join, getmtime
 from os import listdir
+from uuid import uuid4
 
 from sqlobject import *
 
@@ -52,6 +53,9 @@ class File(SQLObject):
     parent_dir = ForeignKey('Directory', notNone=True, cascade=True)
     full_path_index = DatabaseIndex('name', 'parent_dir', unique=True)
     last_seen = DateTimeCol(default=DateTimeCol.now)
+    uuid = StringCol(notNone=True, alternateID=True,
+                     default=lambda: uuid4().hex,
+                    alternateMethodName="by_uuid")
 
     def update_seen(self):
         self.last_seen = DateTimeCol.now()

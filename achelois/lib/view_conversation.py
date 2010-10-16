@@ -20,16 +20,14 @@ attr_dict = {
 
 
 class message_machine(list):
-    #{{{
     def __init__(self, conv, mindex, muuid):
         self.muuid = muuid
         msg_get = mymail.get(muuid)
         processed = msg_machine.process(msg_get)
         self.extend((machined_widget(conv, mindex, idx, data) for idx,data in enumerate(processed)))
-        #}}}
+
 
 class conversation_cache(object):
-    #{{{
     #__metaclass__ = urwid.MetaSignals
     #signals = ['log']
     #_inst_buffers = weakref.WeakKeyDictionary()
@@ -71,10 +69,9 @@ class conversation_cache(object):
                 return cls.get_part(conv, mindex, index)
         try: return cls._inst_buffers[conv]['parts'][mindex][index]
         except: return cls.get_msg(conv, mindex)[index]
-        #}}}
+
 
 class conversation_widget(urwid.WidgetWrap):
-    #{{{
     ''' This widget is not meant for direct use.
     conv is the conv_repr.messages of the particular conversation
     mindex is index of the msg we're on in conv
@@ -131,10 +128,9 @@ class conversation_widget(urwid.WidgetWrap):
             if part: return part
             return r
         return None
-    #}}}
+
 
 class machined_widget(conversation_widget):
-    #{{{
     def __init__(self, conv, mindex, index, contents):
         state, part = contents
         self.state = state
@@ -160,10 +156,9 @@ class machined_widget(conversation_widget):
             container = conversation_cache.get_part(self.conv, self.mindex, None)
             return container.keypress((maxcol,), key)
         return self.__super.keypress((maxcol,), key)
-    #}}}
+
 
 class message_widget(conversation_widget):
-    #{{{
     def __init__(self, conv, mindex):
         msg = conv[mindex]
         #FIXME: add in support for labels and Cc targets
@@ -199,10 +194,9 @@ class message_widget(conversation_widget):
         if not self.expanded:
             return None
         return conversation_cache.get_part(self.conv, self.mindex, -1)
-    #}}}
+
 
 class read_walker(urwid.ListWalker):
-    #{{{
     def __init__(self, conv):
         #begin = conversation_cache.get_part(conv, 0, None)
         for n in xrange(len(conv)):
@@ -242,4 +236,3 @@ class read_walker(urwid.ListWalker):
         if prev_up is None:
             return None, None
         return prev_up, (prev_up.mindex, prev_up.index)
-    #}}}

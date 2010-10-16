@@ -1,15 +1,105 @@
-from overwatch import eband, emit_signal
+#from overwatch import eband, emit_signal
 
 import time
 
 import os.path
+from os.path import join
 import mailbox
+from mailbox import Maildir as _Maildir
+from mailbox import MaildirMessage
 from threading import Thread
+from contextlib import closing
+from mmap import mmap, ACCESS_READ
+
+from sqlobject import connectionForURI, sqlhub
+
+from models.fs import Directory, File
 
 from lib import threadmap
 
-from settings import get_settings
+from settings import get_settings, settingsdir
 settings = get_settings()
+
+
+
+
+
+
+db_filename = join(settingsdir, 'fs_scan.cache')
+
+conn_str = 'sqlite:%s' % db_filename
+conn = connectionForURI(conn_str)
+sqlhub.processConnection = conn
+
+
+
+class Maildir(_Maildir):
+    def __init__(self, MaildirRecords=Directory, MailRecords=File,
+                 factory=None):
+        self._factory = factory
+        self._path = None
+        self._maildir_records = MaildirRecords
+        self._mail_records = MailRecords
+        self._root_records = MaildirRecords.selectBy(parent_dir=None)
+        self._toc = {}
+
+
+    def iteritems(self):
+        records = iter(self._mail_records.select())
+        while 1:
+            try:
+                record = records.next()
+            except StopIteration:
+                break
+            yield record.uuid, self._get_message_for_index(
+                self.__lookup(record.full_path))
+
+    def iterkeys(self):
+        records = iter(self._mail_records.select().lazyColumns())
+        while 1:
+            try:
+                record = records.next()
+            except StopIteration:
+                break
+            yield record.uuid
+
+    def _lookup(self, key):
+        if type(key) is int:
+            fp = self._mail_records.get(key).full_path
+        else:
+            fp = self._mail_records.by_uuid(key).full_path
+        return self.__lookup(fp)
+
+    def __lookup(self, fp):
+        fp = fp.split('/')
+        fname = fp.pop()
+        subdir = fp.pop()
+        self._path = fp = '/'.join(fp)
+        subpath = '/'.join([subdir, fname])
+        return subpath
+
+    def get_message_for_index(self, key):
+        """Return a Message representation or raise a KeyError."""
+        subpath = self._lookup(key)
+        return self._get_message_for_index(subpath)
+
+    def _get_message_for_index(self, subpath):
+        with open(os.path.join(self._path, subpath), 'r') as f:
+            with closing(mmap(f.fileno(), 0, access=ACCESS_READ)) as m:
+                if self._factory:
+                    msg = self._factory(m)
+                else:
+                    msg = MaildirMessage(m)
+        subdir, name = os.path.split(subpath)
+        msg.set_subdir(subdir)
+        if self.colon in name:
+            msg.set_info(name.split(self.colon)[-1])
+        msg.set_date(os.path.getmtime(os.path.join(self._path, subpath)))
+        return msg
+
+
+
+
 
 
 class mail_sources(list):
@@ -71,7 +161,6 @@ class mail_sources(list):
         t = time.time()
         source = self.get_folder(muuid)
         t = time.time() - t
-        emit_signal(eband, 'log', 'in update, getting source took %s seconds' % t)
         #__current = self._pthread(target=source.update, args=({muuid:msg},))
         #__current.start()
         #self._thread(source, 'update', ([(muuid,msg)]))

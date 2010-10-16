@@ -4,20 +4,16 @@ import cgitb
 cgitb.enable(format='text')
 #from IPython.Shell import IPShellEmbed
 
-from overwatch import mail_grab, settings, xapidx
+from overwatch import mail_grab, xappy, xapidx
 
 from email.iterators import typed_subpart_iterator
 from Queue import Queue, Empty
 from threading import Thread, Lock
-from operator import itemgetter
 from functools import partial
-from types import GeneratorType
 from mailbox import MaildirMessage
 
 from datetime import datetime
 import time
-
-import xappy
 
 from lib.metautil import Singleton, MetaSuper
 from databasics import msg_fields, msg_container, msg_factory, lazythread_container, conv_factory

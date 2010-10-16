@@ -10,9 +10,9 @@ from urwid import ListWalker, ListBox, WidgetWrap, MetaSuper, Text, AttrWrap, Co
 import xappy
 
 from lib.metautil import MetaMixin, ScrollMixin
-from achelois.databasics import thread_container
-from achelois.search_utils import get_threads, get_members
-from achelois.tools import filterNone
+from databasics import thread_container
+from search_utils import get_threads, get_members
+from tools import filterNone
 from read_mode import read_box
 
 from lib import threadmap, forkmap

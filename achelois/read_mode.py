@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from overwatch import eband, emit_signal, connect_signal
+from overwatch import eband, emit_signal, connect_signal, mail_grab
 
 from weakref import ref
 from threading import Thread
@@ -9,7 +9,6 @@ from urwid import ListWalker, Text, ListBox, AttrMap, WidgetWrap
 
 from achelois.lib.message_machine import msg_machine
 from achelois.lib.metautil import MetaMixin, MetaSupSig, ScrollMixin
-from achelois import offlinemaildir
 from achelois.lib import threadmap, forkmap
 from mailutils import set_read, set_unread
 from xindex import modify_factory, remove_fields, update_existing, replace_existing, xconn
@@ -31,7 +30,6 @@ class xresult_ref(object):
         try: return __ret[0]
         except: return __ret
 
-mymail = offlinemaildir.mail_sources()
 
 state_dict = {
             'MSG': 'body content',
@@ -64,6 +62,7 @@ class text_select(MetaMixin, ScrollMixin, WidgetWrap):
     no_cache = ['rows']
     signals = ['focus_modify']
     context = 'read_mode'
+
     def __init__(self, txt='Loading', attr='default attr', focus='default focus'):
         w = Text(txt)
         w = AttrMap(w, attr, focus)
@@ -409,7 +408,7 @@ class message_widget(collapser):
         #if 'S' in msgobj.get('flags', ''): self.new = False
         #else: self.new = True
 
-        __msg_get = mymail.get(msgobj.muuid())
+        __msg_get = mail_grab.get(msgobj.muuid())
         __processed = msg_machine.process(__msg_get)
 
         if self.new: self._change_detailed(True)

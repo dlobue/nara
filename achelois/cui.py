@@ -4,7 +4,7 @@
 import cgitb
 cgitb.enable(format='txt')
 
-from overwatch import settings, xapidx, MetaSignals, connect_signal, eband
+from overwatch import settings, xapidx, MetaSignals, connect_signal, eband, xappy
 #from overwatch import settings, MetaSignals, eband, Signals
 
 import urwid.curses_display
@@ -14,7 +14,6 @@ from buffer import buffer_manager
 from collections import deque
 import sys
 
-import xappy
 
 from index_mode import index_box
 from read_mode import read_box
@@ -145,3 +144,4 @@ if __name__ == '__main__':
     main.run()
     #screen = Screen()
     #screen.main()
+

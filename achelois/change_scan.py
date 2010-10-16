@@ -1,13 +1,22 @@
 
 from os.path import join, isdir, getmtime
-from os import listdir
 from datetime import datetime
 
 from sqlobject import connectionForURI, sqlhub, SQLObjectNotFound
+from sqlobject.sresults import SelectResults
 
 from models.fs import Directory, File
 from settings import settingsdir
 from overwatch import settings
+
+from tools import null_handler
+import logging
+
+
+nh = null_handler()
+logger = logging.getLogger("imaplibii.transports")
+logger.addHandler(nh)
+
 
 db_filename = join(settingsdir, 'fs_scan.cache')
 
@@ -27,10 +36,10 @@ def scan_mail():
         assert isdir(_rdir)
         _last_modified = getmtime(_rdir)
     
-        root_maildirs = [Directory(name=_rdir, last_modified=_last_modified-1,
-                                   parent_dir=None)]
+        root_maildirs = Directory(name=_rdir, last_modified=_last_modified-1,
+                                   parent_dir=None)
     
-    return find_missing_and_new(root_maildirs)
+    return find_missing_and_new([root_maildirs])
 
 
 def find_missing_and_new(maildirs):
@@ -38,8 +47,23 @@ def find_missing_and_new(maildirs):
     Scans maildirs looking for new and removed mail.
     """
     started_at = datetime.now()
+    imaildirs = iter(maildirs)
+    stash = []
 
-    for mdir in maildirs:
+    while 1:
+        try:
+            mdir = imaildirs.next()
+            if type(mdir) is SelectResults:
+                stash.append(imaildirs)
+                #maildirs.insert(0, imaildirs)
+                imaildirs = iter(mdir)
+                continue
+        except StopIteration:
+            try:
+                imaildirs = iter(stash.pop())
+                continue
+            except IndexError:
+                break
         if mdir.has_changed:
             mdir_contents = mdir.listdir()
             while 1:
@@ -50,7 +74,8 @@ def find_missing_and_new(maildirs):
                     missing_mail = mdir.files.filter(File.q.last_seen < \
                                                           started_at)
                     for mail in missing_mail:
-                        print('remove from xapian - %r' % mail)
+                        mail.destroySelf()
+                        #print('remove from xapian - %r' % mail)
                     #missing item - remove from dbs
                     break
 
@@ -69,7 +94,7 @@ def find_missing_and_new(maildirs):
                         item.update_seen()
                     except SQLObjectNotFound:
                         item = File(name=item, parent_dir=mdir)
-                        print('add to xapian - %r' % item)
+                        #print('add to xapian - %r' % item)
                         #add to xapian
 
     return

@@ -2,7 +2,7 @@
 from overwatch import mail_grab, emit_signal, eband, MetaSignals, register_signal
 
 #system modules
-from collections import deque, namedtuple
+from collections import namedtuple
 from operator import attrgetter
 from weakref import WeakValueDictionary
 from bisect import insort_right
@@ -11,7 +11,7 @@ from email.utils import parsedate
 from uuid import uuid4
 
 #other modules i need that aren't sys, and I didn't write
-from lib import threadmap
+from blist import blist
 
 #lastly my tools
 from tools import delNone, filterNone
@@ -23,12 +23,14 @@ conv_fields = ('nique_terms', 'labels', 'muuids', 'thread', 'messages')
 _msg_container = namedtuple('msg_container', msg_fields)
 _conv_container = namedtuple('conv_container', conv_fields)
 
-class prop_deque(deque):
+#class prop_deque(deque):
+class prop_deque(list):
     #__slots__ = ()
     def __str__(self):
         if len(self) == 1:
             return self[0]
-        return deque.__str__(self)
+        return list.__str__(self)
+    #return deque.__str__(self)
 
     def __call__(self):
         if len(self) == 1:
@@ -198,8 +200,8 @@ class conv_container(object):
     '''
     Wrap the conv_container named tuple and add some needed methods.
     '''
-    __slots__ = ('__weakref__', '_container', '_wcallback', '_urwid_signals')
-    __slots__ = ('__weakref__', '_container', '_wcallback', '_urwid_signals')
+    #__slots__ = ('__weakref__', '_container', '_wcallback', '_urwid_signals')
+    #__slots__ = ('__weakref__', '_container', '_wcallback', '_urwid_signals')
     _factory_callback = staticmethod(_conv_factory)
 
     def __init__(self, *args, **kwargs):
@@ -305,8 +307,8 @@ class tup_conv_container(_conv_container):
             map(self.muuids.append, __res[2])
 
     def merge(self, dispose):
-	def do_insort(x):
-	    insort_right(self.messages, x)
+        def do_insort(x):
+            insort_right(self.messages, x)
             self.muuids.extend(x.muuid)
 
         self.nique_terms.update(dispose.nique_terms)
@@ -347,7 +349,7 @@ class lazy_refmap(dict):
             del self[key]
             raise KeyError("Item key %s references no longer exists." % key)
 
-class thread_container(list):
+class thread_container(blist):
     '''
     Base class for thread containers. This container requires "hints" in
     order to work. Okay, it requires more than hints. It needs every
@@ -368,11 +370,13 @@ class thread_container(list):
     everything we find everything. This eats up lots of ram unfortunately. :(
     '''
     __slots__ = ('_map')
-    __metaclass__ = MetaSuper
+    #__metaclass__ = MetaSuper
     def __init__(self):
         #self._map = lazy_refmap(self, 'nique_terms')
         #self._map = {}
         self._map = WeakValueDictionary()
+
+
     def datesort(self):
         '''
         Sort conversations so newest are at the top.
@@ -387,15 +391,18 @@ class thread_container(list):
         '''
         try: idx.__int__
         except AttributeError: return self._map[idx]
-        else: return self.__super.__getitem__(idx)
+        else: return super(thread_container, self).__getitem__(idx)
+        #else: return self.__super.__getitem__(idx)
     def __setitem__(self, idx, value):
         try: idx.__int__
         except AttributeError: return self._map.__setitem__(idx, value)
-        else: return self.__super.__setitem__(idx, value)
+        else: return super(thread_container, self).__setitem__(idx, value)
+        #else: return self.__super.__setitem__(idx, value)
     def __delitem__(self, idx):
         try: idx.__int__
         except AttributeError: return self._map.__delitem__(idx)
-        else: return self.__super.__delitem__(idx)
+        else: return super(thread_container, self).__delitem__(idx)
+        #else: return self.__super.__delitem__(idx)
 
         #def append(self, item):
             #    if type(item) is not conv_container:
@@ -440,7 +447,7 @@ class lazythread_container(thread_container):
     reference ids like they should, and forwarding an email wipes out the
     reference ids.
     '''
-    __slots__ = ()
+    #__slots__ = ()
     def append(self, conv):
         '''
         Appends one conversation to the list. If the conversation does not
@@ -450,7 +457,7 @@ class lazythread_container(thread_container):
         '''
         if not conv.thread:
             conv.thread.append(uuid4().hex)
-        self.__super.append(conv)
+        super(lazythread_container, self).append(conv)
         self.dictify(conv)
 
     def extend(self, keymatch, new):

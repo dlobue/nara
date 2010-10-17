@@ -1,4 +1,11 @@
 from datetime import datetime
+import logging
+
+
+class null_handler(logging.Handler):
+    def emit(self, record):
+        pass
+
 
 def flatten(x):
     result = []
@@ -37,9 +44,17 @@ def delNone(x):
     map(_delnone, __thenones)
     return x
 
-def filterNone(x):
+def _filterNone(x):
     thenones = ('', u'', ' ', u' ', 'None', u'None', None)
-    return filter(lambda y: y not in thenones, x)
+    r = filter(lambda y: y not in thenones, x)
+    print('\n')
+    print(x)
+    print(r)
+    return r
+
+def filterNone(x):
+    thenones = (' ', u' ', 'None', u'None')
+    return filter(lambda y: y and y not in thenones, x)
 
 def deuniNone(x):
     '''remove unicoded None's if found'''

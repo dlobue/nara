@@ -7,9 +7,9 @@ from threading import Thread
 
 from urwid import ListWalker, Text, ListBox, AttrMap, WidgetWrap
 
-from achelois.lib.message_machine import msg_machine
-from achelois.lib.metautil import MetaMixin, MetaSupSig, ScrollMixin
-from achelois.lib import threadmap, forkmap
+from nara.lib.message_machine import msg_machine
+from nara.lib.metautil import MetaMixin, MetaSupSig, ScrollMixin
+from nara.lib import threadmap, forkmap
 from mailutils import set_read, set_unread
 from xindex import modify_factory, remove_fields, update_existing, replace_existing, xconn
 from lib.async import Async

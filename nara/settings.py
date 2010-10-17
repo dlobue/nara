@@ -6,7 +6,7 @@ import simplejson
 json = simplejson
 
 
-settingsdir = path.expanduser('~/.achelois')
+settingsdir = path.expanduser('~/.nara')
 _settingsfile = 'settings.json'
 settingsfile = path.join(settingsdir, _settingsfile)
 

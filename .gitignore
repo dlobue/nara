@@ -2,6 +2,9 @@
 *.pyc
 *~
 *.swp
-xap.idx/*
-achelois/xap.idx/*
-*.cache
+.svn/*
+build/*
+dist/*
+CVS/*
+SVN/*
+#*.egg-info/*

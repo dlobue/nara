@@ -1,7 +1,7 @@
 from overwatch import eband, emit_signal
 from urwid import MetaSuper, MetaSignals, connect_signal
 
-from achelois.keymap import kbm
+from nara.keymap import kbm
 #kbm = key_bind_manager
 
 class Singleton(object):

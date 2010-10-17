@@ -1,4 +1,4 @@
-#from achelois.lib.metautil import Singleton
+#from nara.lib.metautil import Singleton
 
 #TODO: put key bindings into yaml or json config files
 

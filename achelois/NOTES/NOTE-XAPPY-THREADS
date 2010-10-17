@@ -1,9 +1,0 @@
-use xappy for thread persistence:
-to get around pickling msg objects: stored field 'msg' is muuid
-muuid is also id for msg record in xappy
-
-no, better yet generate thread ids and append thread ids to every msg "document"
-collapse on thread id, sort by last_update
-
-http://pypi.python.org/pypi/AddOns/0.6
-^^ suggests seperating objects into discrete components (BI, UI, persistence code, etc)

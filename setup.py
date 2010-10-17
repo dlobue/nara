@@ -3,7 +3,7 @@ import sys, os
 
 version = '0.1'
 
-setup(name='achelois',
+setup(name='nara',
       version=version,
       description="curses based maildir email client with gmail-threading",
       long_description="""\

@@ -1,6 +1,6 @@
-from achelois.lib.message_machine import msg_machine
-from achelois import offlinemaildir
-from achelois import tools
+from nara.lib.message_machine import msg_machine
+from nara import offlinemaildir
+from nara import tools
 
 mymail = offlinemaildir.mail_sources()
 state_dict = {

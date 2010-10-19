@@ -23,7 +23,6 @@ from lib import threadmap, forkmap
 srchidx = xapidx
 
 class index_box(ListBox):
-    __slots__ = ('_urwid_signals')
     signals = ['modified']
 
     def __init__(self, query):
@@ -41,8 +40,10 @@ class index_box(ListBox):
             self.body._rows = maxrow
         return self.__super.render(size, focus)
 
+
+
 class index_walker(ListWalker, MetaMixin):
-    __slots__ = ('focus', '_tids', '_query', 'container', '_wstorage', '_rows', '_urwid_signals')
+    #__slots__ = ('focus', '_tids', '_query', 'container', '_wstorage', '_rows', '_urwid_signals')
     signals = ['modified', 'keypress']
     context = 'index_mode'
 
@@ -172,6 +173,8 @@ class index_walker(ListWalker, MetaMixin):
         emit_signal(eband, 'redisplay')
         #if len(to_join): self._modified()
         #return
+
+
 
 class conv_widget_text(MetaMixin, ScrollMixin, WidgetWrap):
     __slots__ = ('_conv')
@@ -315,8 +318,10 @@ class conv_widget_text(MetaMixin, ScrollMixin, WidgetWrap):
             buffer_manager.register_support(self._conv, read_box)
             buffer_manager.set_buffer(self._conv)
 
+
+
 class conv_widget_columns(MetaMixin, ScrollMixin, WidgetWrap):
-    __slots__ = ('_conv')
+    #__slots__ = ('_conv')
     #__slots__ = ('_conv', '_urwid_signals')
     signals = ['keypress', 'modified']
     ignore_focus = False
@@ -415,8 +420,26 @@ class conv_widget_columns(MetaMixin, ScrollMixin, WidgetWrap):
         else:
             oldest_new = dsender[idx]
 
-        dsubject = ('index %s' % tstat, ' %s' % oldest_new.get('subject',[''])[0])
-        dpreview = ('index sample', ' %s' % ' '.join(oldest_new.get('sample',[''])[0].split()))
+        try:
+            #dsubject = ('index %s' % tstat, ' %s' % oldest_new.get('subject',[''])[0])
+            #dsubject = ('index %s' % tstat, ' %s' % oldest_new.get('subject',''))
+            dsubject = ('index %s' % tstat, ' %s' % oldest_new.subject or '')
+        except IndexError, e:
+            with open('/tmp/nara-crash.dump', 'w') as f:
+                f.write(repr(oldest_new.msgid))
+                f.write('\n')
+                f.write(repr(oldest_new.muuid))
+                f.write('\n')
+                f.write(repr(oldest_new.thread))
+                f.write('\n')
+                f.write(repr(oldest_new))
+                f.write('\n')
+                f.write(repr(oldest_new.subject))
+                f.write('\n')
+            raise IndexError(e)
+        #dpreview = ('index sample', ' %s' % ' '.join(oldest_new.get('sample','').split()))
+        #dpreview = ('index sample', ' %s' % ' '.join(oldest_new.get('sample',[''])[0].split()))
+        dpreview = ('index sample', ' %s' % ' '.join((oldest_new.sample or '').split()))
 
         sendmarkup = []
         c=0
@@ -425,7 +448,8 @@ class conv_widget_columns(MetaMixin, ScrollMixin, WidgetWrap):
         for x in dsender:
             if 'S' not in x.flags: stat = 'new'
             else: stat = 'read'
-            fname = x.sender[0].split()[0].strip('"')
+            fname = (x.sender or 'None').split()[0].strip('"')
+            #fname = x.sender[0].split()[0].strip('"')
             if '@' in fname: fname = fname.split('@')[0]
             fname = ' %s,' % fname
             l=len(fname)
@@ -491,13 +515,18 @@ class conv_widget_columns(MetaMixin, ScrollMixin, WidgetWrap):
             buffer_manager.register_support(self._conv, read_box)
             buffer_manager.set_buffer(self._conv)
 
+
+
 conv_widget = conv_widget_columns
+
+
 
 class sigthread_container(thread_container):
     __slots__ = ()
     __metaclass__ = MetaSuper
     def join(self, conv):
         self.__super.join(conv)
-        conv = self[conv.thread[0]]
+        conv = self[conv.thread]
         #Signals.emit(conv, 'modified')
         #emit_signal(conv, 'modified')
+

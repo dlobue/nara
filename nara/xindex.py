@@ -406,6 +406,23 @@ def _make_doc(doc, msg, field, srcmesg=None):
             if srcmesg:
                 __data = _content_parse(srcmesg)
             else:
+                __data = content_parse(msg.muuid)
+            _do_append_field(doc, 'content', __data)
+            __data = __data[:80]
+        else:
+            __data = getattr(msg, field)
+
+        if field == 'muuid': doc.id = __data
+        if hasattr(__data, '__iter__'):
+            [ _do_append_field(doc, field, __x) for __x in __data if __x ]
+        else:
+            _do_append_field(doc, field, __data)
+
+def _make_doc_old(doc, msg, field, srcmesg=None):
+        if field == 'sample':
+            if srcmesg:
+                __data = _content_parse(srcmesg)
+            else:
                 __data = content_parse(msg.muuid[0])
             _do_append_field(doc, 'content', __data)
             __data = __data[:80]

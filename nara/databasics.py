@@ -9,6 +9,7 @@ from bisect import insort_right
 from datetime import datetime
 from email.utils import parsedate
 from uuid import uuid4
+from itertools import izip
 
 #other modules i need that aren't sys, and I didn't write
 from blist import blist
@@ -23,8 +24,16 @@ conv_fields = ('nique_terms', 'labels', 'muuids', 'thread', 'messages')
 _msg_container = namedtuple('msg_container', msg_fields)
 _conv_container = namedtuple('conv_container', conv_fields)
 
+
+field_map = {'sender': 'From', 'msgid': 'Message-ID', 'sent': 'Date',
+                    'osubject': 'Subject', 'in_reply_to': 'In-Reply-To'}
+field_map_blank = {}
+field_multis = {'cc':',', 'to':',', 'flags':None, 'labels':None, 'references':None}
+
+
+
 #class prop_deque(deque):
-class prop_deque(list):
+class prop_list(list):
     #__slots__ = ()
     def __str__(self):
         if len(self) == 1:
@@ -95,6 +104,11 @@ def msg_factory(muuid, msg=None):
         muuid, msg = muuid.id, muuid.data
         '''
 
+    if type(muuid) is msg_container:
+        return muuid
+    elif type(msg) is msg_container:
+        return msg
+
     if not msg:
         msg = mail_grab.get(muuid)
         if not msg:
@@ -108,11 +122,7 @@ def _msg_factory(muuid, msg):
     This does the actual work of pulling the information we care about
     out of the message containers we'll be working with.
     '''
-    field_map = {'sender': 'From', 'msgid': 'Message-ID', 'sent': 'Date',
-                    'osubject': 'Subject', 'in_reply_to': 'In-Reply-To'}
-    field_map_blank = {}
-    field_multis = {'cc':',', 'to':',', 'flags':None, 'labels':None, 'references':None}
-    @auto_deque
+    #@auto_deque
     def do_get(field):
         def do_multi(data):
             try: __x = filterNone(set(data.split(field_multis[field])))
@@ -126,7 +136,13 @@ def _msg_factory(muuid, msg):
         except: field_dict = field_map_blank
         else: field_dict = field_map
 
-        __data = msg.get(field_dict.get(field, field), [])
+        __data = msg.get(field_dict.get(field, field), None)
+        if __data is None:
+            if field not in field_multis:
+                return None
+            else:
+                __data = []
+
         if field_dict:
             if field == 'subject': __data = stripSubject(__data)
             elif field == 'sent': __data = datetime(*parsedate(__data)[:6])
@@ -135,6 +151,11 @@ def _msg_factory(muuid, msg):
                 if field == 'flags': __data = [__x for __x in msg.get_flags()]
                 else: __data = do_multi(__data)
 
+        if field in field_multis:
+            __data = prop_list(__data)
+        elif isinstance(__data, list):
+            assert not len(__data) > 1
+            __data = __data[0]
         return __data
     #__data_m = map(do_get, msg_fields)
     #__data_m = threadmap.map(do_get, msg_fields)
@@ -161,24 +182,50 @@ def _conv_factory(msg):
     '''
     This does the actual work pulling the unique information out of a message.
     '''
-    __muuid = prop_deque(msg.get('muuid', []))
+    __muuid = prop_list([msg.get('muuid')])
+    #__muuid = prop_deque(msg.get('muuid', []))
 
-    __msgid = set(msg.get('msgid', []))
-    __in_reply = set(msg.get('in_reply_to', []))
-    __refs = set(msg.get('references', []))
-    __subjects = set(msg.get('subject',[]))
+    __msgid = set([msg.get('msgid')])
+    __in_reply = set([msg.get('in_reply_to')])
+    __subjects = set([msg.get('subject')])
+    __refs = set(msg.references)
+    #__refs = set(msg.get('references', []))
 
     __nique_terms = __msgid | __in_reply | __refs | __subjects
     delNone(__nique_terms)
 
-    __labels = set(msg.get('labels',[]))
+    #__labels = set(msg.get('labels',[]))
+    __labels = set(msg.labels)
     delNone(__labels)
 
-    __thread = msg.get('thread',[])
-    __thread = prop_deque(__thread)
+    __thread = msg.get('thread')
     return (__nique_terms, __labels, __muuid, __thread, [msg])
 
-class msg_container(_msg_container):
+class msg_container(object):
+    _fields = msg_fields
+    def __init__(self, *args):
+        for k,v in izip(self._fields, args):
+            assert not ( k == 'references' and v is None )
+            setattr(self, k, v)
+
+    def setdefault(self, key, alt):
+        try: return getattr(self, key)
+        except AttributeError:
+            setattr(self, key, alt)
+            return alt
+
+    def get(self, key, alt=None):
+        try:
+            v = getattr(self, key)
+            if v is None and alt is not None:
+                return alt
+            return v
+        except AttributeError:
+            print('attr error on key %s' % key)
+            return alt
+
+
+class tup_msg_container(_msg_container):
     '''
     Monkey patch the named tuple _msg_container and add in a dict-like
     get method. (Don't remember why I needed this originally).
@@ -195,6 +242,7 @@ class msg_container(_msg_container):
         try: return getattr(self, key)
         except AttributeError:
             return alt
+
 
 class conv_container(object):
     '''
@@ -232,7 +280,7 @@ class conv_container(object):
         Convenience method to quickly find out when this conversation was last
         updated.
         '''
-        return self.messages[-1].sent[0]
+        return self.messages[-1].sent
 
     def get(self, key, alt=None):
         try: return getattr(self, key)
@@ -416,10 +464,10 @@ class thread_container(blist):
         up only based upon their threadid.
         '''
         if type(item) is conv_container:
-            try: return self[item.thread[0]].merge(item)
+            try: return self[item.thread].merge(item)
             except KeyError:
                 self.append(item)
-                self[item.thread[0]] = item
+                self[item.thread] = item
         elif type(item) is msg_container:
             raise TypeError('Unable to thread that.')
             #return self.join(conv_container(item))
@@ -456,7 +504,7 @@ class lazythread_container(thread_container):
         As a last step it updates the lookup table with any new unique terms.
         '''
         if not conv.thread:
-            conv.thread.append(uuid4().hex)
+            conv.thread = uuid4().hex
         super(lazythread_container, self).append(conv)
         self.dictify(conv)
 

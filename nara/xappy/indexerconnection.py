@@ -308,6 +308,12 @@ class IndexerConnection(object):
             document.id = orig_id
         return id
 
+    def delete(self, docid):
+        if self._index is None:
+            raise errors.IndexerError("IndexerConnection has been closed")
+        self._index.delete_document('Q' + docid)
+
+
     def replace(self, document):
         """Replace a document in the search engine index.
 

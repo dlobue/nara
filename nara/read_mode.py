@@ -107,6 +107,7 @@ class text_select(MetaMixin, ScrollMixin, WidgetWrap):
     def pack(self, *args, **kwargs):
         return self._w.original_widget.pack(*args, **kwargs)
 
+
 class machined_widget(text_select):
     __slots__ = ('state', '_detail', 'expanded', '_parent')
     context = 'read_mode'
@@ -155,10 +156,12 @@ class machined_widget(text_select):
     def detail(self):
         __r = self._detail
         return __r
+
     @property
     def summary(self):
         __r = '+--- %s, enter or space to expand' % state_dict[self.state]
         return __r
+
 
 class collapser_label(text_select):
     __slots__ = ()
@@ -168,8 +171,8 @@ class collapser_label(text_select):
         #    self._emit('keypress', (maxcol,), key)
         #    return key
 
+
 class collapser_blank(text_select):
-    __slots__ = ()
     ignore_focus = True
     no_cache = ()
     _selectable = False
@@ -177,7 +180,6 @@ class collapser_blank(text_select):
 
 
 class collapser(MetaMixin, ScrollMixin):
-    __slots__ = ('expanded', 'detailed', 'label', '_cache', '_urwid_signals', '__weakref__', 'spacer')
     __metaclass__ = MetaSupSig
     signals = ['focus_modify']
     context = 'read_mode'
@@ -320,6 +322,7 @@ class collapser(MetaMixin, ScrollMixin):
     def append(self, data):
         list.append(self._cache, data)
 
+
 class group_state(collapser):
     __slots__ = ('_parent')
     def __init__(self, data, parent):
@@ -395,6 +398,7 @@ class group_state(collapser):
     def do_group_open_detailed(self, (maxcol,),): self._change_detailed(True)
     def do_group_close_detailed(self, (maxcol,),): self._change_detailed(False)
     '''
+
 
 class message_widget(collapser):
     __slots__ = ('msgobj', '_state_order')
@@ -554,6 +558,7 @@ class message_widget(collapser):
     def do_msg_close_detailed(self, (maxcol,),): self._change_detailed(False)
     '''
 
+
 class read_box(ListBox):
     __slots__ = ('_urwid_signals', '__size', '_last_top')
     signals = ['modified', 'yank']
@@ -613,6 +618,8 @@ class read_box(ListBox):
     def _invalidate(self):
         emit_signal(self, 'modified')
         return self.__super._invalidate()
+
+
 
 class read_walker(ListWalker, MetaMixin):
     __slots__ = ('_cache', 'focus', '_listbox', '_last_focus')
@@ -782,3 +789,5 @@ class read_walker(ListWalker, MetaMixin):
         except AttributeError:
             #no self.label
             return mdef(convpos, msgpos-1, -1)
+
+

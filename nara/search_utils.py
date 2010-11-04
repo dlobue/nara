@@ -15,10 +15,9 @@ def get_members(sconn, tids):
     results = map(msg_factory, results)
     return results
 
-def search(sconn, query, collapse=False):
-    __searchargs = (0, 99999999)
+def search(sconn, query, collapse=False, minrank=0, maxrank=99999999):
     __searchkwargs = {'checkatleast': -1, 'sortby': '-sent'}
     if collapse: __searchkwargs['collapse'] = 'thread'
-    __results = sconn.search(query, *__searchargs, **__searchkwargs)
+    __results = sconn.search(query, minrank, maxrank, **__searchkwargs)
     return __results
 

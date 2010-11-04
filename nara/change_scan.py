@@ -8,15 +8,15 @@ from sqlobject import connectionForURI, sqlhub, SQLObjectNotFound
 from sqlobject.sresults import SelectResults
 from pubsub import pub
 
-from models.fs import Directory, SubDirectory, File
-from settings import settingsdir
-from overwatch import settings
+from models.fs import Directory, File
+from settings import settingsdir, get_sources
+sources = get_sources()
 
 from tools import null_handler
 
 
 nh = null_handler()
-logger = logging.getLogger("imaplibii.transports")
+logger = logging.getLogger("nara.changescan")
 logger.addHandler(nh)
 
 
@@ -24,29 +24,55 @@ db_filename = join(settingsdir, 'fs_scan.cache')
 
 conn_str = 'sqlite:%s' % db_filename
 conn = connectionForURI(conn_str)
-sqlhub.processConnection = conn
+sqlhub.processConnection = trans = conn.transaction()
 
 
+class isChildNode(Exception): pass
 
-def scan_mail():
+
+def scan_mail(getmtime=getmtime):
     Directory.createTable(ifNotExists=True)
+    Directory.createIndexes(ifNotExists=True)
     File.createTable(ifNotExists=True)
+    File.createIndexes(ifNotExists=True)
 
-    root_maildirs = Directory.selectBy(parent_dir=None)
-    if not root_maildirs.count():
-        _rdir = settings['rdir']
-        assert isdir(_rdir)
-        _last_modified = getmtime(_rdir)
+    root_maildirs = []
+    known_root_maildirs = Directory.selectBy(parent_dir=None)
+
+    for mdir in sorted(sources):
+        mdir = mdir.rstrip('/')
+        mdir_record = known_root_maildirs.filter(Directory.q.name == mdir)
+        if mdir_record.count():
+            root_maildirs.append(mdir_record.getOne())
+            continue
+        _last_modified = getmtime(mdir)-1
+        _end = -1
+        if root_maildirs:
+            try:
+                while 1:
+                    try:
+                        _end = mdir.rindex('/', 0, _end)
+                    except ValueError:
+                        break
+                    _path_part = mdir[:_end]
+                    if _path_part in sources:
+                        # not a root maildir
+                        raise isChildNode
+            except isChildNode:
+                continue
+
+        root_maildirs.append(Directory(name=mdir,
+                                       last_modified=_last_modified,
+                                       parent_dir=None))
+    for mdir in (m for m in known_root_maildirs if m not in root_maildirs):
+        mdir.destroySelf()
     
-        root_maildirs = Directory(name=_rdir, last_modified=_last_modified-1,
-                                   parent_dir=None)
-    
-    return find_missing_and_new([root_maildirs])
+    print('done getting maildirs')
+    trans.commit()
+    return root_maildirs
 
 
-#TODO: only emails are valid "files"
-#TODO: don't bother recording 'new', 'cur', or 'tmp' maildir subpaths.
-def update_maildir_cache(maildirs, colon=':'):
+def update_maildir_cache(maildirs, colon=':', trans=trans):
     """
     Scans maildirs looking for new and removed mail.
     """
@@ -54,6 +80,7 @@ def update_maildir_cache(maildirs, colon=':'):
     imaildirs = iter(maildirs)
     stash = []
     substash = []
+    mdirmsg_separator = '%s2,' % colon
 
     while 1:
         try:
@@ -70,6 +97,7 @@ def update_maildir_cache(maildirs, colon=':'):
                 break
         if mdir.has_changed:
             mdir_contents = mdir.listdir()
+            seen_state = None
             while 1:
                 try:
                     item = mdir_contents.next()
@@ -78,12 +106,16 @@ def update_maildir_cache(maildirs, colon=':'):
                     if substash:
                         mdir_contents = substash.pop()
                         continue
-                    missing_mail = mdir.files.filter(File.q.last_seen < \
-                                                          started_at)
+                    if seen_state is None:
+                        if not mdir.files.count():
+                            break
+                        missing_mail = mdir.files
+                    else:
+                        missing_mail = mdir.files.filter(File.q.was_seen == \
+                                                         (not seen_state))
                     for mail in missing_mail:
-                        #pub.sendMessage('nara.xindex.delete', docid=mail.uuid)
-                        #XXX: use sqlobject's signalling
                         mail.destroySelf()
+                    trans.commit()
                     break
 
                 if isdir(itemfp):
@@ -113,14 +145,25 @@ def update_maildir_cache(maildirs, colon=':'):
                                          last_modified=getmtime(itemfp)-1)
                     maildirs.append(item)
                 elif substash:
-                    item = item.split(colon)[0]
+                    if mdirmsg_separator not in item:
+                        # not a properly formatted Maildir message filename.
+                        # skip it.
+                        continue
+                    item = item.split(mdirmsg_separator)[0]
                     try:
                         item = mdir.files.filter(File.q.name == item).getOne()
-                        item.update_seen()
+                        seen_state = item.update_seen()
                     except SQLObjectNotFound:
-                        item = File(name=item, parent_dir=mdir)
-                        #print('add to xapian - %r' % item)
+                        if seen_state is None:
+                            if mdir.files.count():
+                                seen_state = not mdir.files.limit(1).getOne().was_seen
+                            else:
+                                seen_state = True
+                        item = File(name=item, parent_dir=mdir,
+                                    was_seen=seen_state)
                         #add to xapian
+
+    trans.commit(close=True)
 
 
 
@@ -180,7 +223,33 @@ def find_missing_and_new(maildirs):
                     yield item
 
 
+from pprint import pprint
+
+def _f(x):
+    s = sources.get(x.parent_dir.full_path, None)
+    if s is None:
+        return
+
+    lbls = []
+    try: lbls.extend(s['labels'][:])
+    except TypeError:
+        # no default labels given
+        pass
+    if not s['archived']:
+        lbls.append('index')
+    print(lbls)
+
+def created_listener(kwargs, post_funcs):
+    post_funcs.append(_f)
+
+def destroy_listener(inst, post_funcs):
+    print('destroy_listener run')
+    pprint(inst)
+    print('')
 
 if __name__ == '__main__':
-    scan_mail()
+    from sqlobject.events import listen, RowDestroySignal, RowCreatedSignal
+    listen(created_listener, File, RowCreatedSignal)
+    listen(destroy_listener, File, RowDestroySignal)
+    update_maildir_cache(scan_mail())
 

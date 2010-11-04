@@ -5,7 +5,7 @@ import time
 import os.path
 from os.path import join
 import mailbox
-from mailbox import Maildir as _Maildir
+from mailbox import Maildir
 from mailbox import MaildirMessage
 from threading import Thread
 from contextlib import closing
@@ -14,6 +14,7 @@ from mmap import mmap, ACCESS_READ
 from sqlobject import connectionForURI, sqlhub
 
 from models.fs import Directory, File
+from change_scan import scan_mail
 
 from lib import threadmap
 
@@ -32,8 +33,32 @@ conn = connectionForURI(conn_str)
 sqlhub.processConnection = conn
 
 
+class multi_maildir(object):
+    def __init__(self):
+        self._map = {}
 
-class Maildir(_Maildir):
+    def get(self, key):
+        krec, kmdir = self._get_maildir(key)
+        return kmdir.get_message(krec.name)
+
+    def _get(self, key):
+        krec = File.get(int(key))
+        krec_parent = krec.parent_dir
+        kmdir = self._map.get(krec_parent, None)
+        if kmdir is None:
+            kmdir = Maildir(krec_parent.full_path, factory=None)
+            self._map[krec_parent] = kmdir
+        return krec, kmdir
+
+    def update(self, key, msg):
+        krec, kmdir = self._get_maildir(key)
+        kmdir.update({krec.name:msg})
+
+    def scanchanges(self):
+        return scan_mail()
+
+
+class __Maildir(_Maildir):
     def __init__(self, MaildirRecords=Directory, MailRecords=File,
                  factory=None):
         self._factory = factory

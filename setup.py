@@ -20,8 +20,9 @@ longdesc""",
       install_requires=[
           # -*- Extra requirements: -*-
             'urwid>=0.9.8.4',
-            'Whoosh>=0.1.22',
-            'python-dateutil'
+            'blist',
+          'sqlobject',
+          'pypubsub',
       ],
       entry_points="""
       # -*- Entry points: -*-

@@ -1,11 +1,5 @@
 import email.iterators
 
-'''
-def chunkify(rawmail):
-    ostandin = rawmail.replace(message_seperators[0], '%mesg-sep').replace(message_seperators[1], '%mesg-sep').replace('\n \n', '%sdnewline').replace('\n\n', '%newline').replace('%newline', '\n').replace('%sdnewline', '').replace('\n\nFrom: ', '\n%mesg-sep\nFrom: ').split('%mesg-sep')
-    return ostandin
-    '''
-
 block_start = ('________________________________', '-----Original Message-----')
 
 class msg_machine(object):
@@ -17,7 +11,7 @@ class msg_machine(object):
                 cls._is_attachment(subpart)
                 continue
             if subpart.get_content_maintype() == 'text':
-                subtype = subpart.get_content_subtype() 
+                subtype = subpart.get_content_subtype()
                 if subtype == 'html': cls._is_html(subpart)
                 elif subtype == 'plain': cls._is_plaintxt(subpart)
                 else: cls._is_dunno(subpart)

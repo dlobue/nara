@@ -10,8 +10,14 @@ settingsdir = path.expanduser('~/.nara')
 _settingsfile = 'settings.json'
 settingsfile = path.join(settingsdir, _settingsfile)
 
+_sourcesfile = 'sources.json'
+sourcesfile = path.join(settingsdir, _sourcesfile)
+
 _xapidx = 'xap.idx'
 xapidx = path.join(settingsdir, _xapidx)
+
+_convdb = 'conv.idx'
+convdb = path.join(settingsdir, _convdb)
 
 settings = None
 def load_settings():
@@ -34,27 +40,25 @@ def save_settings():
     with open(settingsfile) as f:
         json.dump(settings, f)
 
-'''
-settings = {
-    "ixmetadir": "/tank/projects/emailtest/index_dir", 
-    "maildirinc": [
-        "INBOX", 
-        "INBOX.MIEN", 
-        "INBOX.Read", 
-        "INBOX.alertsite", 
-        "INBOX.atg errors", 
-        "INBOX.hp sim", 
-        "INBOX.misc", 
-        "INBOX.mom", 
-        "INBOX.monit", 
-        "INBOX.nagios", 
-        "INBOX.networkperf", 
-        "INBOX.receipt", 
-        "INBOX.save", 
-        "INBOX.scom", 
-        "Sent", 
-        "Sent Items"
-    ], 
-    "rdir": "/tank/projects/emailtest/offlineimap/dlobue"
-    }
-    '''
+
+sources = None
+def load_sources():
+    if not path.exists(settingsdir):
+        mkdir(settingsdir)
+
+    global sources
+    with open(sourcesfile) as f:
+        sources = json.load(f)
+def get_sources():
+    global sources
+    if not sources: load_sources()
+    return sources
+
+def save_sources():
+    if not path.exists(settingsdir):
+        mkdir(settingsdir)
+
+    global sources
+    with open(sourcesfile) as f:
+        json.dump(sources, f)
+

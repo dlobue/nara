@@ -1,5 +1,6 @@
-from settings import get_settings, settings, xapidx
+from settings import get_settings, settings, get_sources, sources, xapidx, convdb
 settings = get_settings()
+sources = get_sources()
 
 from urwid.signals import MetaSignals, emit_signal, register_signal, connect_signal, disconnect_signal
 

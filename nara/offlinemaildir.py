@@ -37,6 +37,23 @@ class multi_maildir(object):
     def __init__(self):
         self._map = {}
 
+    def get_file(self, key):
+        krec, kmdir = self._get_maildir(key)
+        return kmdir.get_file(krec.name)
+
+    def get_mmapmsg(self, key):
+        krec, kmdir = self._get_maildir(key)
+        with closing(kmdir.get_file(krec.name)) as f:
+            with closing(mmap(f.fileno(), 0, access=ACCESS_READ)) as m:
+                if kmdir._factory:
+                    return kmdir._factory(m)
+                else:
+                    return MaildirMessage(m)
+
+    def get_message(self, key):
+        krec, kmdir = self._get_maildir(key)
+        return kmdir.get_message(krec.name)
+
     def get(self, key):
         krec, kmdir = self._get_maildir(key)
         return kmdir.get_message(krec.name)

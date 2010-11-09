@@ -1,5 +1,5 @@
 from settings import get_settings, settings, get_sources, sources, xapidx, convdb
-settings = get_settings()
+#settings = get_settings()
 sources = get_sources()
 
 from urwid.signals import MetaSignals, emit_signal, register_signal, connect_signal, disconnect_signal
@@ -16,9 +16,9 @@ class _eband(object):
 eband = _eband()
 
 #from offlinemaildir import mail_sources
-from offlinemaildir import Maildir
+from offlinemaildir import multi_maildir
 
-mail_grab = Maildir()
+mail_grab = multi_maildir()
 #mail_grab = mail_sources()
 
 if __name__ == '__main__':

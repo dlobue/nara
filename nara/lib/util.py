@@ -1,4 +1,5 @@
 from functools import wraps
+from cPickle import dumps
 
 class MetaSuper(type):
     '''blatent ripoff of Urwid's MetaSuper class
@@ -25,4 +26,20 @@ def static_memoize(fctn):
         memo.__doc__ = "\n".join([memo.__doc__,"This function is memoized."])
     return memo
 
+
+def memoize(fctn):
+    memory = {}
+    @wraps(fctn)
+    def memo(*args,**kwargs):
+        haxh = dumps((args, sorted(kwargs.iteritems())))
+
+        if haxh not in memory:
+            r = fctn(*args,**kwargs)
+            if r is not None:
+                memory[haxh] = r
+
+        return memory[haxh]
+    if memo.__doc__:
+        memo.__doc__ = "\n".join([memo.__doc__,"This function is memoized."])
+    return memo
 

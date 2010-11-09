@@ -2,17 +2,18 @@
 from os.path import join, isdir, getmtime
 from os import listdir
 from datetime import datetime
+from functools import partial
 import logging
 
 from sqlobject import connectionForURI, sqlhub, SQLObjectNotFound
 from sqlobject.sresults import SelectResults
-from pubsub import pub
 
 from models.fs import Directory, File
 from settings import settingsdir, get_sources
 sources = get_sources()
 
 from tools import null_handler
+from lib.util import memoize
 
 
 nh = null_handler()
@@ -28,7 +29,23 @@ sqlhub.processConnection = trans = conn.transaction()
 
 
 class isChildNode(Exception): pass
+class logicError(Exception): pass
 
+@memoize
+def _find_mdir_source(mdir, fail=False):
+    _end = -1
+    while 1:
+        try:
+            _end = mdir.rindex('/', 0, _end)
+        except ValueError:
+            break
+        _path_part = mdir[:_end]
+        if _path_part in sources:
+            # not a root maildir
+            if fail:
+                raise isChildNode
+            else:
+                return sources[_path_part]
 
 def scan_mail(getmtime=getmtime):
     Directory.createTable(ifNotExists=True)
@@ -46,18 +63,9 @@ def scan_mail(getmtime=getmtime):
             root_maildirs.append(mdir_record.getOne())
             continue
         _last_modified = getmtime(mdir)-1
-        _end = -1
         if root_maildirs:
             try:
-                while 1:
-                    try:
-                        _end = mdir.rindex('/', 0, _end)
-                    except ValueError:
-                        break
-                    _path_part = mdir[:_end]
-                    if _path_part in sources:
-                        # not a root maildir
-                        raise isChildNode
+                _find_mdir_source(mdir, fail=True)
             except isChildNode:
                 continue
 
@@ -225,22 +233,25 @@ def find_missing_and_new(maildirs):
 
 from pprint import pprint
 
-def _f(x):
-    s = sources.get(x.parent_dir.full_path, None)
+def _find_default_labels(inst):
+    s = sources.get(inst.parent_dir.full_path, None)
     if s is None:
-        return
+        s = _find_mdir_source(inst.parent_dir.full_path)
 
     lbls = []
-    try: lbls.extend(s['labels'][:])
-    except TypeError:
-        # no default labels given
-        pass
+    if s['labels']:
+        lbls.extend(s['labels'])
     if not s['archived']:
         lbls.append('index')
-    print(lbls)
+    return lbls
 
-def created_listener(kwargs, post_funcs):
-    post_funcs.append(_f)
+def queue_msg(msginst, msg_indexer_queue):
+    labels = _find_default_labels(msginst)
+    msg_indexer_queue.put(('index', msginst.id, labels))
+
+
+def created_listener(kwargs, post_funcs, msg_indexer_queue):
+    post_funcs.append(partial(queue_msg, msg_indexer_queue=msg_indexer_queue))
 
 def destroy_listener(inst, post_funcs):
     print('destroy_listener run')

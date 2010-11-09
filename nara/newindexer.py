@@ -4,8 +4,11 @@ from email.utils import parsedate
 from email.iterators import typed_subpart_iterator
 from Queue import Queue, Empty
 from threading import Thread, Lock
+from multiprocessing import Queue as pQueue
+from multiprocessing import Process
 
 from overwatch import mail_grab, xappy, xapidx
+from lib.metautil import Singleton, MetaSuper
 from tools import delNone, filterNone
 
 
@@ -28,33 +31,6 @@ flag_label_map = {'D': 'draft',
 
 subdir_label_map = {'new': 'unseen', 'cur': '-unseen'}
 
-
-field_action_map = {'content': _content_parse,
-                    'subdir': lambda msg: msg.get_subdir(),
-                    'flags': lambda msg: [x for x in msg.get_flags()],
-                   }
-
-
-
-
-def make_doc(msg_key):
-    doc = xappy.UnprocessedDocument()
-    doc.id = str(msg_key)
-    for field in index_msg_fields:
-        data = _extract_msg_data(msg, field)
-        if data:
-            _do_append_field(doc, field, data)
-
-    return doc
-
-def index(msg_key):
-    msg = mail_grab.get(msg_key)
-    doc = make_doc(msg, msg_key)
-    xapproxy.replace(doc)
-    # to send following to conv indexer:
-    data = [ _extract_msg_data(msg, field) for field in index_conv_fields ]
-
-
 def _content_parse(msg):
     if not msg.is_multipart():
         __content = msg.get_payload(decode=True)
@@ -66,9 +42,64 @@ def _content_parse(msg):
     return __content
 
 
+field_action_map = {'content': _content_parse,
+                    'subdir': lambda msg: msg.get_subdir(),
+                    'flags': lambda msg: [x for x in msg.get_flags()],
+                   }
+
+
+
+def IndexerProcess(xapdb_path, que):
+    xapproxy = XapProxy(xapdb_path)
+    while 1:
+        try:
+            work = que.get(True, 30)
+        except Empty:
+            #do some cleanup and kill process
+            raise NotImplemented
+
+        task = work[0]
+        globals()[task](xapproxy, *work[1:])
+
+
+def _populate_fields(msg, doc, labels):
+    for field in index_msg_fields:
+        data = _extract_msg_data(msg, field)
+        if data:
+            if field in ('subdir', 'flags'):
+                field = 'labels'
+            _do_append_field(doc, field, data)
+    
+    doc = _add_labels(doc, labels)
+
+    return doc
+
+def index(xapproxy, msg_key, labels):
+    msg = mail_grab.get(msg_key)
+    doc = xappy.UnprocessedDocument()
+    doc.id = str(msg_key)
+    doc = _populate_fields(msg, doc)
+    xapproxy.replace(doc)
+    # to send following to conv indexer
+    #data = [ _extract_msg_data(msg, field) for field in index_conv_fields ]
+
+
+def _add_labels(doc, labels):
+    for label in labels:
+        _do_append_field(doc, 'labels', label)
+    return doc
+
+def add_labels(xapproxy, msg_key, labels):
+    if not isinstance(msg_key, (str, unicode)):
+        msg_key = str(msg_key)
+    doc = xapproxy.get_document(msg_key)
+    doc = _add_labels(doc, labels)
+    xapproxy.replace(doc)
+
 def _do_append_field(doc, field, data):
     if hasattr(data, '__iter__'):
-        return [ _do_append_field(doc, field, d) for d in data ]
+        [ _do_append_field(doc, field, d) for d in data ]
+        return doc
     if not hasattr(doc, 'fields') or doc.fields is None:
         doc.fields = []
     doc.fields.append(xappy.Field(field, data))
@@ -104,8 +135,7 @@ def _extract_msg_data(msg, field):
 
 
 class XapProxy(Singleton):
-    __slots__ = ()
-    __metaclass__ = MetaSuper
+    #__slots__ = ()
     _queue = Queue()
     thread_started = False
     indexer_started = False
@@ -116,8 +146,9 @@ class XapProxy(Singleton):
     _noque = ('process', 'iterids', 'get_document', 'iter_facet_query_types',
               'iter_subfacets', 'iter_synonyms')
 
-    def __init__(self, idxdb):
+    def __init__(self, idxdb, actions_init):
         self._idxdb = idxdb
+        self._set_field_actions = staticmethod(action_init)
 
     def __getattr__(self, name):
         if name in self._noque:
@@ -156,7 +187,6 @@ class XapProxy(Singleton):
         with self._lock:
             def shutdown():
                 self._idxconn.flush()
-                sconn.reopen()
                 self._idxconn.close()
                 self.thread_started = False
                 self.indexer_started = False
@@ -169,13 +199,11 @@ class XapProxy(Singleton):
                 try: getattr(self._idxconn, task)(*args, **kwargs)
                 except xappy.XapianDatabaseModifiedError, e:
                     self._idxconn._index.reopen()
-                    sconn.reopen()
                     getattr(self._idxconn, task)(*args, **kwargs)
 
                 self._queue.task_done()
                 if task == 'flush':
                     print "%s - processing flush now" % datetime.now()
-                    sconn.reopen()
                     if self._queue.empty():
                         shutdown()
                         break
@@ -194,7 +222,7 @@ class XapProxy(Singleton):
         with self._lock:
             if not self.indexer_started:
                 _idxconn = xappy.IndexerConnection(self._idxdb)
-                self._idxconn = _set_field_actions(_idxconn)
+                self._idxconn = self._set_field_actions(_idxconn)
             self.indexer_started = True
         if not self.thread_started: self.thread_init()
 
@@ -310,4 +338,22 @@ def _set_field_actions(idxconn):
     return idxconn
 
 
+
+if __name__ == '__main__':
+    from functools import partial
+    from change_scan import update_maildir_cache, scan_mail, created_listener,\
+            destroy_listener, File, Directory
+    from sqlobject.events import listen, RowDestroySignal, RowCreatedSignal
+
+    msg_indexer_queue = pQueue()
+
+    ps = []
+    p = Process(target=IndexerProcess, args=(xapidx, msg_indexer_queue))
+    ps.append(p)
+    p.start()
+
+
+    listen(partial(created_listener, msg_indexer_queue=msg_indexer_queue), File, RowCreatedSignal)
+    listen(destroy_listener, File, RowDestroySignal)
+    update_maildir_cache(scan_mail())
 

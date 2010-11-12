@@ -25,13 +25,13 @@ db_filename = join(settingsdir, 'fs_scan.cache')
 
 conn_str = 'sqlite:%s' % db_filename
 conn = connectionForURI(conn_str)
-sqlhub.processConnection = trans = conn.transaction()
+sqlhub.processConnection = conn
+#sqlhub.processConnection = trans = conn.transaction()
 
 
 class isChildNode(Exception): pass
 class logicError(Exception): pass
 
-@memoize
 def _find_mdir_source(mdir, fail=False):
     _end = -1
     while 1:
@@ -76,11 +76,12 @@ def scan_mail(getmtime=getmtime):
         mdir.destroySelf()
     
     print('done getting maildirs')
-    trans.commit()
+    #trans.commit()
     return root_maildirs
 
 
-def update_maildir_cache(maildirs, colon=':', trans=trans):
+#def update_maildir_cache(maildirs, colon=':', trans=trans):
+def update_maildir_cache(maildirs, colon=':'):
     """
     Scans maildirs looking for new and removed mail.
     """
@@ -123,7 +124,7 @@ def update_maildir_cache(maildirs, colon=':', trans=trans):
                                                          (not seen_state))
                     for mail in missing_mail:
                         mail.destroySelf()
-                    trans.commit()
+                        #trans.commit()
                     break
 
                 if isdir(itemfp):
@@ -171,7 +172,7 @@ def update_maildir_cache(maildirs, colon=':', trans=trans):
                                     was_seen=seen_state)
                         #add to xapian
 
-    trans.commit(close=True)
+    #trans.commit(close=True)
 
 
 
@@ -207,7 +208,7 @@ def find_missing_and_new(maildirs):
                     missing_mail = mdir.files.filter(File.q.last_seen < \
                                                           started_at)
                     for mail in missing_mail:
-                        pub.sendMessage('nara.xindex.delete', docid=mail.uuid)
+                        #pub.sendMessage('nara.xindex.delete', docid=mail.uuid)
                         mail.destroySelf()
                     break
 
@@ -233,10 +234,11 @@ def find_missing_and_new(maildirs):
 
 from pprint import pprint
 
-def _find_default_labels(inst):
-    s = sources.get(inst.parent_dir.full_path, None)
+@memoize
+def _find_default_labels(mdir_path):
+    s = sources.get(mdir_path, None)
     if s is None:
-        s = _find_mdir_source(inst.parent_dir.full_path)
+        s = _find_mdir_source(mdir_path)
 
     lbls = []
     if s['labels']:
@@ -245,10 +247,25 @@ def _find_default_labels(inst):
         lbls.append('index')
     return lbls
 
+class indexer_listener(object):
+    def __init__(self, que):
+        self.queue = que
+
+    def queue_msg(self, msginst):
+        labels = _find_default_labels(msginst.parent_dir.full_path)
+        self.queue.put(('index', msginst.id, labels))
+
+    def created_listener(self, kwargs, post_funcs):
+        print('new msg found. kwargs: %r' % kwargs)
+        post_funcs.append(self.queue_msg)
+
 def queue_msg(msginst, msg_indexer_queue):
     labels = _find_default_labels(msginst)
     msg_indexer_queue.put(('index', msginst.id, labels))
 
+
+def _created_listener(kwargs, post_funcs, msg_indexer_queue):
+    post_funcs.append(partial(queue_msg, msg_indexer_queue=msg_indexer_queue))
 
 def created_listener(kwargs, post_funcs, msg_indexer_queue):
     post_funcs.append(partial(queue_msg, msg_indexer_queue=msg_indexer_queue))
@@ -259,8 +276,12 @@ def destroy_listener(inst, post_funcs):
     print('')
 
 if __name__ == '__main__':
-    from sqlobject.events import listen, RowDestroySignal, RowCreatedSignal
-    listen(created_listener, File, RowCreatedSignal)
-    listen(destroy_listener, File, RowDestroySignal)
+    #from sqlobject.events import listen, RowDestroySignal, RowCreatedSignal
+    #listen(created_listener, File, RowCreatedSignal)
+    #listen(destroy_listener, File, RowDestroySignal)
+    from time import time
+    t = time()
     update_maildir_cache(scan_mail())
+    t = time() - t
+    print('took %r seconds' % t)
 

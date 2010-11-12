@@ -4,7 +4,10 @@ import cgitb
 cgitb.enable(format='text')
 #from IPython.Shell import IPShellEmbed
 
-from overwatch import mail_grab, xappy, xapidx
+from overwatch import xappy, xapidx
+from offlinemaildir import mail_sources
+
+mail_grab = mail_sources()
 
 from email.iterators import typed_subpart_iterator
 from Queue import Queue, Empty
